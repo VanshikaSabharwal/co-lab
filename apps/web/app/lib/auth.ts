@@ -101,6 +101,9 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
+  pages: {
+    signIn: "/signin",
+  },
   secret: process.env.JWT_SECRET,
   callbacks: {
     async session({ token, session }: { token: JWT; session: Session }) {

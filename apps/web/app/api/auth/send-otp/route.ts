@@ -20,7 +20,7 @@ async function sendOtp(email: string, phone: string) {
   await transporter.sendMail({
     from: process.env.EMAIL_USER,
     to: email,
-    subject: "OTP verification for V Wallet",
+    subject: "OTP verification for Co-lab",
     text: `Your OTP is ${otpNum}`,
   });
 

@@ -21,11 +21,13 @@ const signupSchema = z.object({
     .string()
     .regex(/^[0-9]{10}$/, "Phone number must be exactly 10 digits")
     .optional(),
+
   otp: z
     .string()
     .min(6, "OTP must be 6 digits")
     .max(6, "OTP must be 6 digits")
-    .regex(/^\d+$/, "OTP must contain only digits"),
+    .regex(/^\d+$/, "OTP must contain only digits")
+    .optional(), // OTP is optional if phone is not provided
 });
 
 export async function POST(req: NextRequest) {
@@ -35,30 +37,43 @@ export async function POST(req: NextRequest) {
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: parsed.error.message },
+        { error: parsed.error.errors }, // Return detailed validation errors
         { status: 400 }
       );
     }
+
     const { name, email, phone, password, otp } = parsed.data;
 
     // Ensure phone is a string (provide a fallback if undefined)
-    const userPhone = phone ?? ""; // Fallback to an empty string or handle as needed
+    const userPhone = phone ?? "";
 
-    // Verify OTP
-    const storedOtp = await db.otp.findFirst({
-      where: { phone: userPhone, otp },
-    });
-    if (!storedOtp || storedOtp.expiresAt < new Date()) {
+    // Check if phone is provided if OTP is used
+    if (otp && !userPhone) {
       return NextResponse.json(
-        { error: "Invalid or expired OTP" },
+        { error: "Phone number is required for OTP verification" },
         { status: 400 }
       );
+    }
+
+    // Verify OTP if provided
+    if (otp) {
+      const storedOtp = await db.otp.findFirst({
+        where: { phone: userPhone, otp },
+      });
+
+      if (!storedOtp || storedOtp.expiresAt < new Date()) {
+        return NextResponse.json(
+          { error: "Invalid or expired OTP" },
+          { status: 400 }
+        );
+      }
     }
 
     // Check if user exists
     const existingUser = await db.user.findFirst({
       where: { email, phone: userPhone },
     });
+
     if (existingUser) {
       return NextResponse.json(
         { error: "User already exists" },
@@ -79,8 +94,10 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // delete OTP
-    await db.otp.deleteMany({ where: { phone } });
+    // Delete OTP if used
+    if (otp) {
+      await db.otp.deleteMany({ where: { phone: userPhone } });
+    }
 
     return NextResponse.json(
       { message: "User created successfully", user },

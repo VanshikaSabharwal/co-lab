@@ -3,6 +3,8 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import Link from "next/link";
+import { GrPowerCycle } from "react-icons/gr";
 
 const SignUp = () => {
   const router = useRouter();
@@ -12,9 +14,13 @@ const SignUp = () => {
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [isOtpSent, setIsOtpSent] = useState(false);
+  const [userExist, setUserExist] = useState(false);
 
-  const handleSignup = async () => {
-    // signup logic here
+  // Send OTP to the user
+  const handleSendOtp = async () => {
+    // Show loading toast
+    const toastId = toast.loading("Sending OTP...");
+
     try {
       const response = await fetch("/api/auth/send-otp", {
         method: "POST",
@@ -23,19 +29,27 @@ const SignUp = () => {
         },
         body: JSON.stringify({ email, phone }),
       });
+
       if (response.ok) {
         setIsOtpSent(true);
-        toast.success("OTP sent successfully");
+        toast.success("OTP sent on Email");
       } else {
-        toast.success("Failed to send OTP");
+        const result = await response.json();
+        toast.error(result.error || "Failed to send OTP");
       }
     } catch (err) {
-      console.log(err);
+      console.error(err);
+      toast.error("An error occurred while sending OTP");
+    } finally {
+      toast.dismiss(toastId); // Dismiss the loading toast
     }
   };
 
+  // Resend OTP
   const handleResendOtp = async () => {
-    console.log("Resend OTP");
+    // Show loading toast
+    const toastId = toast.loading("Resending OTP...");
+
     try {
       const response = await fetch("/api/auth/send-otp", {
         method: "POST",
@@ -44,19 +58,27 @@ const SignUp = () => {
         },
         body: JSON.stringify({ email, phone }),
       });
+
       if (response.ok) {
-        setIsOtpSent(true);
-        toast.success("OTP sent Again !");
+        toast.success("OTP sent again!");
       } else {
-        toast.error("Failed to send OTP");
+        const result = await response.json();
+        toast.error(result.error || "Failed to resend OTP");
       }
     } catch (error) {
       console.error(error);
+      toast.error("An error occurred while resending OTP");
+    } finally {
+      toast.dismiss(toastId); // Dismiss the loading toast
     }
   };
 
+  // Final signup with OTP
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Show loading toast
+    const toastId = toast.loading("Signing up...");
 
     try {
       const response = await fetch("/api/auth/signup", {
@@ -71,18 +93,22 @@ const SignUp = () => {
 
       if (response.ok) {
         toast.success("User Created Successfully. Please Login now");
-        router.push("/");
+        router.push("/api/auth/signin");
       } else {
-        toast.error(result.error);
+        toast.error(result.error || "Signup failed");
+        setUserExist(true);
       }
     } catch (error) {
       console.error(error);
+      toast.error("An error occurred during signup");
+    } finally {
+      toast.dismiss(toastId); // Dismiss the loading toast
     }
   };
 
   return (
     <form
-      onSubmit={handleSignup}
+      onSubmit={handleSignUp}
       className="max-w-lg mx-auto p-6 bg-white shadow-md rounded"
     >
       <h1 className="text-2xl font-bold mb-6 text-center">Sign Up</h1>
@@ -128,7 +154,7 @@ const SignUp = () => {
       {/* Phone Field */}
       <div className="mb-4">
         <label
-          htmlFor="number"
+          htmlFor="phone"
           className="block text-sm font-medium text-gray-700"
         >
           Phone Number
@@ -163,13 +189,69 @@ const SignUp = () => {
         />
       </div>
 
+      {/* OTP Field (conditionally rendered) */}
+      {isOtpSent && (
+        <div className="mb-4">
+          <label
+            htmlFor="otp"
+            className="block text-sm font-medium text-gray-700"
+          >
+            OTP
+          </label>
+          <input
+            type="text"
+            id="otp"
+            placeholder="Enter the OTP"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value)}
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+            required
+          />
+        </div>
+      )}
+
+      {/* Send OTP Button (if OTP not sent) */}
+      {!isOtpSent && (
+        <button
+          type="button"
+          onClick={handleSendOtp}
+          className="w-full py-2 px-4 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50"
+        >
+          Send OTP
+        </button>
+      )}
+
+      {/* Resend OTP Button (if OTP already sent) */}
+      {isOtpSent && (
+        <button
+          type="button"
+          onClick={handleResendOtp}
+          className="w-full py-2 px-4 bg-pink-600 hover:bg-pink-500 text-white font-bold rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50"
+        >
+          <GrPowerCycle />
+        </button>
+      )}
+
       {/* Submit Button */}
-      <button
-        type="submit"
-        className="w-full py-2 px-4 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50"
-      >
-        Sign Up
-      </button>
+      {isOtpSent && (
+        <button
+          type="submit"
+          className="w-full py-2 px-4 bg-pink-600 hover:bg-pink-500 text-white font-bold rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50"
+        >
+          Sign Up
+        </button>
+      )}
+
+      {userExist && (
+        <div className="mt-4">
+          <Link
+            href="/api/auth/signin"
+            className="w-full py-2 px-4 bg-pink-600 hover:bg-pink-500 text-white font-bold rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50"
+          >
+            Login
+          </Link>
+        </div>
+      )}
     </form>
   );
 };
