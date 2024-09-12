@@ -191,22 +191,31 @@ const SignUp = () => {
 
       {/* OTP Field (conditionally rendered) */}
       {isOtpSent && (
-        <div className="mb-4">
-          <label
-            htmlFor="otp"
-            className="block text-sm font-medium text-gray-700"
+        <div className="mb-4 flex items-center space-x-2">
+          <div className="flex-grow">
+            <label
+              htmlFor="otp"
+              className="block text-sm font-medium text-gray-700"
+            >
+              OTP
+            </label>
+            <input
+              type="text"
+              id="otp"
+              placeholder="Enter the OTP"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              required
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleResendOtp}
+            className="flex items-center justify-center p-2 bg-pink-600 text-white rounded-full hover:bg-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500"
           >
-            OTP
-          </label>
-          <input
-            type="text"
-            id="otp"
-            placeholder="Enter the OTP"
-            value={otp}
-            onChange={(e) => setOtp(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-            required
-          />
+            <GrPowerCycle className="w-5 h-5" />
+          </button>
         </div>
       )}
 
@@ -218,17 +227,6 @@ const SignUp = () => {
           className="w-full py-2 px-4 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50"
         >
           Send OTP
-        </button>
-      )}
-
-      {/* Resend OTP Button (if OTP already sent) */}
-      {isOtpSent && (
-        <button
-          type="button"
-          onClick={handleResendOtp}
-          className="w-full py-2 px-4 bg-pink-600 hover:bg-pink-500 text-white font-bold rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50"
-        >
-          <GrPowerCycle />
         </button>
       )}
 
