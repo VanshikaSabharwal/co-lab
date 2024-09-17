@@ -1,15 +1,9 @@
-"use client";
-import { useParams } from "next/navigation";
+import ChatWithPhone from "./ChatWithPhone";
 
-const ChatPage = () => {
-  const { chatId } = useParams(); // useParams to get the dynamic route parameter
+// This function receives route parameters
+export default function ChatPage({ params }: { params: { chatId: string } }) {
+  const { chatId } = params;
 
-  return (
-    <div>
-      <h1>Chat with User {chatId}</h1>
-      {/* Display chat messages based on chatId */}
-    </div>
-  );
-};
-
-export default ChatPage;
+  // Pass chatId as a string to the ChatWithPhone component
+  return <ChatWithPhone phone={chatId} />;
+}

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import FriendSearch from "../components/FriendSearch";
 
 // Example contact list with phone numbers
@@ -12,6 +13,7 @@ const contacts = [
 ];
 
 const ChatApp = () => {
+  const { data: session } = useSession();
   const [selectedChat, setSelectedChat] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const router = useRouter();
@@ -25,6 +27,14 @@ const ChatApp = () => {
 
   return (
     <div className="flex h-screen bg-[#f5c6e0]">
+      {/* top section  */}
+      <div className="border-b-2 border-[#d1a1d0] p-4 bg-[#d1a1d0] text-white">
+        <h2 className="text-xl font-semibold">
+          {session?.user?.email || "User"} -{" "}
+          {session?.user?.phone || "No phone number"}
+        </h2>
+      </div>
+
       {/* Left side: Contact List */}
       <div className="w-full md:w-1/4 bg-[#e0a1d0] text-white p-4 flex flex-col space-y-4">
         <h1 className="text-xl font-bold text-[#d1a1d0] mb-4">Contacts</h1>
@@ -36,44 +46,7 @@ const ChatApp = () => {
         className={`${
           selectedChat ? "block" : "hidden md:block"
         } w-full md:w-3/4 bg-[#e5b6e5] p-6 flex flex-col justify-between`}
-      >
-        {selectedChat ? (
-          <>
-            {/* Chat Header */}
-            <div className="border-b-2 border-[#d1a1d0] p-4 bg-[#d1a1d0] text-white">
-              <h2 className="text-xl font-semibold">
-                Chat with {contacts.find((c) => c.id === selectedChat)?.name}
-              </h2>
-            </div>
-
-            {/* Chat Messages */}
-            <div className="flex-grow p-6 space-y-4 overflow-y-auto">
-              <div className="bg-[#f5c6e0] text-white p-4 rounded-lg w-3/4 self-end">
-                Hello! How are you?
-              </div>
-              <div className="bg-white text-black p-4 rounded-lg w-3/4 self-start">
-                I'm good, thanks! How about you?
-              </div>
-            </div>
-
-            {/* Chat Input */}
-            <div className="p-4 border-t-2 border-[#d1a1d0] bg-white flex space-x-4">
-              <input
-                type="text"
-                placeholder="Type a message"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f5c6e0]"
-              />
-              <button className="bg-[#f5c6e0] text-white px-4 py-3 rounded-lg hover:bg-[#d1a1d0]">
-                Send
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="hidden md:block text-center text-white">
-            <p>Select a contact to start chatting.</p>
-          </div>
-        )}
-      </div>
+      ></div>
     </div>
   );
 };

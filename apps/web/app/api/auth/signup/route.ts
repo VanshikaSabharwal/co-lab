@@ -3,7 +3,7 @@ import db from "@repo/db/client";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 
-// zod schema for validation
+// Zod schema for validation
 const signupSchema = z.object({
   name: z
     .string()
@@ -44,11 +44,8 @@ export async function POST(req: NextRequest) {
 
     const { name, email, phone, password, otp } = parsed.data;
 
-    // Ensure phone is a string (provide a fallback if undefined)
-    const userPhone = phone ?? "";
-
     // Check if phone is provided if OTP is used
-    if (otp && !userPhone) {
+    if (otp && !phone) {
       return NextResponse.json(
         { error: "Phone number is required for OTP verification" },
         { status: 400 }
@@ -56,9 +53,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify OTP if provided
-    if (otp) {
+    if (otp && phone) {
+      // Ensure phone is available before OTP check
       const storedOtp = await db.otp.findFirst({
-        where: { phone: userPhone, otp },
+        where: { phone, otp },
       });
 
       if (!storedOtp || storedOtp.expiresAt < new Date()) {
@@ -69,9 +67,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Check if user exists
     const existingUser = await db.user.findFirst({
-      where: { email, phone: userPhone },
+      where: { email, phone: phone || "" },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        phone: true,
+      },
     });
 
     if (existingUser) {
@@ -89,14 +92,14 @@ export async function POST(req: NextRequest) {
       data: {
         username: name,
         email,
-        phone: userPhone, // Ensure this is always a string
+        phone: phone || "", // Ensure phone is an empty string if not provided
         password: hashedPassword,
       },
     });
 
     // Delete OTP if used
     if (otp) {
-      await db.otp.deleteMany({ where: { phone: userPhone } });
+      await db.otp.deleteMany({ where: { phone } });
     }
 
     return NextResponse.json(
