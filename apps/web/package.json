@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "npm run db:generate && next build",
+    "build": "npm run db:generate db:websocket && next build",
     "start": "next start",
     "lint": "next lint",
-    "db:generate": "npx prisma generate --schema=../../packages/db/prisma/schema.prisma"
+    "db:generate": "npx prisma generate --schema=../../packages/db/prisma/schema.prisma",
+    "db:websocket": "npx prisma generate --schema=../../apps/web-socket/prisma/schema.prisma"
   },
   "dependencies": {
     "@repo/ui": "*",

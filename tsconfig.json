@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@repo/db/client": ["packages/db/client"]
+    },
+    "rootDir": "./",
+    "outDir": "./dist",
+    "moduleResolution": "node",
+    "target": "es6",
+    "module": "commonjs"
+  },
+  "include": ["apps/**/*", "packages/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

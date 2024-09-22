@@ -20,7 +20,6 @@ model User{
   password String
   username     String   @unique
   phone    String   @unique
-  messages Message[]  @relation("UserMessages")
   chats    ChatUser[]
   friendships Friendship[] @relation("FriendshipSender")
   friends   Friendship[]   @relation("FriendshipReceiver")
@@ -42,7 +41,6 @@ model Chat{
   id String  @id @default(cuid())
   name String? 
   isGroup Boolean  @default(false)
-  messages  Message[]  @relation("ChatMessages")
   users    ChatUser[]
 }
 
@@ -55,14 +53,13 @@ model ChatUser{
   @@id([userId,chatId])
 }
 
-model Message{
-  id String  @id @default(cuid())
-  content String
-  timestamp DateTime  @default(now())
-  senderId  String
-  chatId String
-  sender User   @relation("UserMessages",fields:[senderId],references:[id])
-  chat  Chat   @relation("ChatMessages",fields:[chatId],references:[id])
+model Messages{
+   id         Int      @id @default(autoincrement())
+  content    String
+  senderId   String
+  chatId     String
+  recipientId String
+  createdAt  DateTime @default(now())
 }
 
 model Otp{

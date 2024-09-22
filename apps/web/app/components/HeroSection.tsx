@@ -1,7 +1,12 @@
+"use server";
 import React from "react";
 import Link from "next/link";
+import { getServerSession } from "next-auth";
+import { authOptions } from "../lib/auth";
 
-const HeroSection = () => {
+const HeroSection = async () => {
+  const session = await getServerSession(authOptions);
+
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-black via-gray-900 to-gray-800 text-white p-6">
       {/* Main Heading */}
@@ -17,12 +22,21 @@ const HeroSection = () => {
       </p>
 
       {/* Get Started Button */}
-      <Link
-        href="/signup"
-        className="px-6 py-3 bg-pink-600 text-white rounded-lg text-lg hover:bg-pink-500 transition-all duration-300 shadow-lg"
-      >
-        Get Started
-      </Link>
+      {session ? (
+        <Link
+          href="/chat-room"
+          className="px-6 py-3 bg-pink-600 text-white rounded-lg text-lg hover:bg-pink-500 transition-all duration-300 shadow-lg"
+        >
+          Go to Chat Room
+        </Link>
+      ) : (
+        <Link
+          href="/signup"
+          className="px-6 py-3 bg-pink-600 text-white rounded-lg text-lg hover:bg-pink-500 transition-all duration-300 shadow-lg"
+        >
+          Get Started
+        </Link>
+      )}
     </div>
   );
 };

@@ -5,10 +5,11 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "module": "commonjs",
+    // "moduleResolution": "c",
     "target": "es6",
     "baseUrl": ".",
     "paths": {
-      "@repo/db/*": ["../../packages/db/src/*"]
+      "@repo/db/*": ["../../packages/db/*"]
     }
   },
   "include": ["src/**/*.ts"],

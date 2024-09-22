@@ -1,8 +1,11 @@
 {
   "name": "@repo/db",
   "version": "0.0.0",
-  "scripts": {
-    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+  "type": "commonjs",
+  "exports": {
+    "./client": "./index.ts",
+    ".": "./index.ts",
+    "./index": "./index.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1"
@@ -12,8 +15,5 @@
     "prisma": "^5.19.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.4"
-  },
-  "exports": {
-    "./client": "./index.ts"
   }
 }

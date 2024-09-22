@@ -25,20 +25,35 @@ const ChatApp = () => {
       contact.phone.includes(searchTerm)
   );
 
-  return (
+  return session ? (
     <div className="flex h-screen bg-[#f5c6e0]">
-      {/* top section  */}
-      <div className="border-b-2 border-[#d1a1d0] p-4 bg-[#d1a1d0] text-white">
-        <h2 className="text-xl font-semibold">
-          {session?.user?.email || "User"} -{" "}
-          {session?.user?.phone || "No phone number"}
-        </h2>
-      </div>
-
       {/* Left side: Contact List */}
-      <div className="w-full md:w-1/4 bg-[#e0a1d0] text-white p-4 flex flex-col space-y-4">
-        <h1 className="text-xl font-bold text-[#d1a1d0] mb-4">Contacts</h1>
-        <FriendSearch />
+      <div className="w-full md:w-1/4 bg-[#e0a1d0] text-white p-4 flex flex-col justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white mb-6">Contacts</h1>
+          <FriendSearch />
+          <div className="mt-4 space-y-4">
+            {filteredContacts.map((contact) => (
+              <div
+                key={contact.id}
+                className="bg-[#d1a1d0] p-3 rounded-md hover:bg-[#c590c9] transition-colors"
+              >
+                <h2 className="text-lg font-semibold">{contact.name}</h2>
+                <p className="text-sm">{contact.phone}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bottom section: Email and Phone */}
+        <div className="border-t border-white mt-6 pt-4 text-center">
+          <p className="text-sm">
+            <strong>Email:</strong> {session?.user?.email || "User"}
+          </p>
+          <p className="text-sm">
+            <strong>Phone:</strong> {session?.user?.phone || "No phone number"}
+          </p>
+        </div>
       </div>
 
       {/* Right side: Chat Area */}
@@ -46,8 +61,12 @@ const ChatApp = () => {
         className={`${
           selectedChat ? "block" : "hidden md:block"
         } w-full md:w-3/4 bg-[#e5b6e5] p-6 flex flex-col justify-between`}
-      ></div>
+      >
+        {/* Chat content can go here */}
+      </div>
     </div>
+  ) : (
+    <p>Please Sign In to see chats</p>
   );
 };
 
