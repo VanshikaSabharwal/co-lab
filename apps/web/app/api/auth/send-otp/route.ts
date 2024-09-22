@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import db from "@repo/db/client"; // Adjust the import path
+import { prisma } from "@repo/db/client";
 
 // Create nodemailer transporter
 const transporter = nodemailer.createTransport({
@@ -28,13 +28,13 @@ async function sendOtp(email: string, phone: string) {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Expires OTP in 10 minutes
 
   // Check if OTP already exists for the email/phone
-  const existingOtp = await db.otp.findFirst({
+  const existingOtp = await prisma.otp.findFirst({
     where: { phone, email },
   });
 
   if (existingOtp) {
     // Update the existing OTP
-    await db.otp.update({
+    await prisma.otp.update({
       where: { id: existingOtp.id },
       data: {
         otp: otpNum,
@@ -43,7 +43,7 @@ async function sendOtp(email: string, phone: string) {
     });
   } else {
     // Create new OTP record
-    await db.otp.create({
+    await prisma.otp.create({
       data: {
         phone,
         email,
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     // Action to send or resend OTP
     if (action === "resend") {
       // Handle resend OTP logic
-      const existingOtp = await db.otp.findFirst({
+      const existingOtp = await prisma.otp.findFirst({
         where: { phone, email },
       });
 

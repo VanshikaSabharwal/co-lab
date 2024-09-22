@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import db from "@repo/db/client";
+import { prisma } from "@repo/db/client";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     // Verify OTP if provided
     if (otp && phone) {
       // Ensure phone is available before OTP check
-      const storedOtp = await db.otp.findFirst({
+      const storedOtp = await prisma.otp.findFirst({
         where: { phone, otp },
       });
 
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const existingUser = await db.user.findFirst({
+    const existingUser = await prisma.user.findFirst({
       where: { email, phone: phone || "" },
       select: {
         id: true,
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create user in the database
-    const user = await db.user.create({
+    const user = await prisma.user.create({
       data: {
         username: name,
         email,
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
 
     // Delete OTP if used
     if (otp) {
-      await db.otp.deleteMany({ where: { phone } });
+      await prisma.otp.deleteMany({ where: { phone } });
     }
 
     return NextResponse.json(

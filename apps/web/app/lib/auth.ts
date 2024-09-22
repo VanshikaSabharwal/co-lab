@@ -1,4 +1,4 @@
-import db from "@repo/db/client";
+import { prisma } from "@repo/db/client";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -70,7 +70,7 @@ export const authOptions: NextAuthOptions = {
 
           const { name, email, phone, password } = parsedCredentials.data;
           const hashedPassword = await bcrypt.hash(password, 10);
-          const existingUser = await db.user.findFirst({
+          const existingUser = await prisma.user.findFirst({
             where: {
               email,
             },

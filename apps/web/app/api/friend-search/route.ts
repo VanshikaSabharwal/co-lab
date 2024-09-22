@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import db from "@repo/db/client";
+import { prisma } from "@repo/db/client";
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const existingFriend = await db.user.findFirst({
+    const existingFriend = await prisma.user.findFirst({
       where: { phone },
     });
 
