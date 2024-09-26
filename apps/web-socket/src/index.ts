@@ -1,15 +1,11 @@
 import WebSocket, { WebSocketServer } from "ws";
-import { runProducer, runConsumer } from "./kafka";
 import http from "http";
 import Express from "express";
 import Redis from "ioredis";
 
-const redisSubClient = new Redis(); // For subscribing
-const redisPublishClient = new Redis(); // For publishing
-const redisClient = new Redis(); // For other Redis commands (e.g., caching)
-
-// Run Kafka consumer
-runConsumer();
+const redisSubClient = new Redis();
+const redisPublishClient = new Redis();
+const redisClient = new Redis();
 
 const app = Express();
 const port = 8080;
@@ -31,13 +27,13 @@ redisSubClient.on("message", (channel, message) => {
   if (channel === "chat-channel") {
     console.log("Broadcasting message to WebSocket clients:", message);
 
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      } else {
-        console.log("Skipping broadcast for self: ", message);
-      }
-    });
+    // wss.clients.forEach((client) => {
+    //   if (client.readyState === WebSocket.OPEN) {
+    //     client.send(message);
+    //   } else {
+    //     console.log("Skipping broadcast for self: ", message);
+    //   }
+    // });
   }
 });
 
@@ -51,10 +47,6 @@ wss.on("connection", (ws) => {
 
     // Publish message to Redis using the dedicated publishing client
     redisPublishClient.publish("chat-channel", message.toString());
-
-    // Send the message to Kafka
-    const producer = await runProducer(); // Ensure the producer is running
-    await producer.sendMessage("MESSAGES", message.toString());
 
     // Cache the message using the regular Redis client
     await redisClient.set(`message:${Date.now()}`, message.toString());

@@ -1,5 +1,4 @@
-// import { NextRequest, NextResponse } from "next/server";
+// export async function POST(req:Request){
+//     const{}
 
-// export default async function POST(req:NextRequest,res:NextResponse){
-//   const {chatId,content,senderId}
 // }

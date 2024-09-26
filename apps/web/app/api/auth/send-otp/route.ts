@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import { prisma } from "@repo/db/client";
+import prisma from "../../../lib/prisma";
 
 // Create nodemailer transporter
 const transporter = nodemailer.createTransport({

@@ -1,11 +1,8 @@
 {
   "name": "@repo/db",
   "version": "0.0.0",
-  "type": "commonjs",
   "exports": {
-    "./client": "./index.ts",
-    ".": "./index.ts",
-    "./index": "./index.ts"
+    "./client": "./index.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1"

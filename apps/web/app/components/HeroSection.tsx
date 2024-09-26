@@ -21,7 +21,7 @@ const HeroSection = async () => {
         platform.
       </p>
 
-      {/* Get Started Button */}
+      {/* Get Started or Chat Room Button */}
       {session ? (
         <Link
           href="/chat-room"
@@ -37,6 +37,14 @@ const HeroSection = async () => {
           Get Started
         </Link>
       )}
+
+      {/* Make a Group Button */}
+      <Link
+        href="/create-group"
+        className="mt-4 px-6 py-3 bg-indigo-600 text-white rounded-lg text-lg hover:bg-indigo-500 transition-all duration-300 shadow-lg"
+      >
+        Make a Group for Project Work
+      </Link>
     </div>
   );
 };

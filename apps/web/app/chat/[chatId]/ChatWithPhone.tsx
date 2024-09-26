@@ -16,58 +16,70 @@ interface Message {
 }
 
 const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
-  const chatId = phone;
+  const chatId = [session?.user?.phone, phone].sort().join("-");
+  const userId = session?.user.phone;
+
+  // Load messages from localStorage
+  useEffect(() => {
+    const savedMessages = localStorage.getItem(chatId);
+    if (savedMessages) {
+      setMessages(JSON.parse(savedMessages));
+    }
+  }, [chatId]);
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem(chatId, JSON.stringify(messages));
+    }
+  }, [messages, chatId]);
 
   useEffect(() => {
-    const connectWebSocket = () => {
-      const ws = new WebSocket("ws://localhost:8080");
-      wsRef.current = ws;
+    if (status === "authenticated" && session?.user?.phone) {
+      const connectWebSocket = () => {
+        const ws = new WebSocket(`ws://localhost:8080?userId=${userId}`);
+        wsRef.current = ws;
 
-      ws.onmessage = async (event) => {
-        try {
-          const message = await event.data;
-          const parsedMessage: Message = JSON.parse(message as string);
-          setMessages((prevMessages) => {
-            // Check if the message already exists in the state
-            const messageExists = prevMessages.some(
-              (msg) =>
-                msg.timestamp === parsedMessage.timestamp &&
-                msg.senderId === parsedMessage.senderId
-            );
-            // Only add the message if it doesn't already exist
-            return messageExists
-              ? prevMessages
-              : [...prevMessages, parsedMessage];
-          });
-        } catch (err) {
-          console.error("Error parsing message: ", err);
+        ws.onmessage = async (event) => {
+          try {
+            const message = await JSON.parse(event.data);
+            if (!message.timestamp) {
+              message.timestamp = Date.now();
+            }
+
+            if (message.chatId === chatId) {
+              setMessages((prevMessages) => [...prevMessages, message]);
+            }
+          } catch (err) {
+            console.error("Error parsing message: ", err);
+          }
+        };
+
+        ws.onerror = (err) => {
+          console.error("WebSocket error: ", err);
+        };
+
+        ws.onclose = () => {
+          console.warn("WebSocket closed, attempting to reconnect...");
+          setTimeout(connectWebSocket, 3000);
+        };
+      };
+
+      connectWebSocket();
+
+      return () => {
+        if (wsRef.current) {
+          wsRef.current.close();
         }
       };
+    }
+  }, [status, session?.user?.phone]);
 
-      ws.onerror = (err) => {
-        console.error("WebSocket error: ", err);
-      };
-
-      ws.onclose = () => {
-        console.warn("WebSocket closed, attempting to reconnect...");
-        setTimeout(connectWebSocket, 3000);
-      };
-    };
-
-    connectWebSocket();
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, []);
-
-  const handleSendMessage = async () => {
+  const handleSendMessage = () => {
     if (!newMessage.trim()) return;
 
     const messageToSend: Message = {
@@ -80,16 +92,27 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(messageToSend));
-      // Optimistically add the message to the state
       setMessages((prevMessages) => [...prevMessages, messageToSend]);
       setNewMessage("");
     }
   };
 
+  // Handle chat deletion
+  const handleDeleteChat = () => {
+    localStorage.removeItem(chatId);
+    setMessages([]);
+  };
+
   return (
     <div className="flex flex-col h-screen">
-      <div className="p-4 bg-gray-200">
+      <div className="p-4 bg-gray-200 flex justify-between items-center">
         <h2 className="text-xl text-black-900">Chat with {phone}</h2>
+        <button
+          onClick={handleDeleteChat}
+          className="ml-2 p-2 bg-red-500 text-white rounded-lg"
+        >
+          Delete Chat
+        </button>
       </div>
 
       <div className="flex-grow p-6 overflow-y-auto">
