@@ -45,6 +45,14 @@ const HeroSection = async () => {
       >
         Make a Group for Project Work
       </Link>
+
+      {/* All groups*/}
+      <Link
+        href="/groups"
+        className="mt-4 px-6 py-3 bg-indigo-600 text-white rounded-lg text-lg hover:bg-indigo-500 transition-all duration-300 shadow-lg"
+      >
+        All Groups
+      </Link>
     </div>
   );
 };

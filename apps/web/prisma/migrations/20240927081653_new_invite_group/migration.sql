@@ -80,6 +80,17 @@ CREATE TABLE "GroupMember" (
 );
 
 -- CreateTable
+CREATE TABLE "Invite" (
+    "id" TEXT NOT NULL,
+    "phone" TEXT NOT NULL,
+    "groupId" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "createdAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Invite_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "_ChatParticipants" (
     "A" TEXT NOT NULL,
     "B" TEXT NOT NULL
@@ -99,6 +110,12 @@ CREATE INDEX "GroupMember_groupId_idx" ON "GroupMember"("groupId");
 
 -- CreateIndex
 CREATE INDEX "GroupMember_userId_idx" ON "GroupMember"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Invite_phone_key" ON "Invite"("phone");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Invite_phone_groupId_key" ON "Invite"("phone", "groupId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "_ChatParticipants_AB_unique" ON "_ChatParticipants"("A", "B");
@@ -129,6 +146,9 @@ ALTER TABLE "GroupMember" ADD CONSTRAINT "GroupMember_groupId_fkey" FOREIGN KEY 
 
 -- AddForeignKey
 ALTER TABLE "GroupMember" ADD CONSTRAINT "GroupMember_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Invite" ADD CONSTRAINT "Invite_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "Group"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "_ChatParticipants" ADD CONSTRAINT "_ChatParticipants_A_fkey" FOREIGN KEY ("A") REFERENCES "Chat"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -86,6 +86,17 @@ model GroupMember {
   @@index([userId])
 }
 
+model Invite {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  groupId   String
+  status    String   @default("pending")
+  createdAt DateTime
+ 
+
+  @@unique([phone, groupId])
+}
+
 enum GroupRole {
   ADMIN
   MEMBER
