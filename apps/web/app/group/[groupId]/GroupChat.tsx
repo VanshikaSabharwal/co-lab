@@ -39,11 +39,6 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         const response = await fetch(`/api/create-group-data?group=${group}`);
         const data = await response.json();
         setGroupDetails(data);
-
-        // Check if the user is a member of the group
-        const memberResponse = await fetch(`/api/group-members?group=${group}`);
-        const members: GroupMember[] = await memberResponse.json();
-        setIsMember(members.some((member) => member.userId === senderId));
       } catch (err) {
         console.error("Error fetching details: ", err);
       }
@@ -104,6 +99,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   return (
     <div className="chat-container p-6 max-w-lg mx-auto border border-gray-300 rounded-lg bg-white shadow-md">
       <h1 className="text-2xl font-bold text-center mb-4">Group Chat</h1>
+      <h2>Group Id: {group}</h2>
       {isOwner && (
         <div className="flex justify-between mb-4">
           <a

@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     });
 
     if (user) {
-      return NextResponse.json({ exists: true });
+      return NextResponse.json({ exists: true, userId: user.id });
     } else {
       return NextResponse.json({ exists: false });
     }

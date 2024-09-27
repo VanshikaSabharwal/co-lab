@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -12,17 +13,33 @@ const AddGroupMember: React.FC<AddGroupProps> = ({ groupId }) => {
   const [userExists, setUserExists] = useState<boolean | null>(null);
   const [inviteSent, setInviteSent] = useState(false);
   const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null);
-  const { data: session, status } = useSession(); // fetch session data
+  const { data: session, status } = useSession();
   const [backToGroup, setBackToGroup] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const userId = session?.user.id;
-
-  // Handler for phone number input
   const handlePhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPhoneNumber(e.target.value);
   };
 
-  // Function to check if the user exists
+  const getUserId = async (): Promise<string | null> => {
+    try {
+      const res = await fetch(`/api/get-user-id?phone=${phoneNumber}`);
+      const data = await res.json();
+
+      if (data.exists && data.userId) {
+        setUserId(data.userId);
+        return data.userId;
+      } else if (data.error) {
+        alert(`Error: ${data.error}`);
+        setBackToGroup(true);
+      }
+      return null;
+    } catch (err) {
+      console.error("Error getting user ID:", err);
+      return null;
+    }
+  };
+
   const checkUserExists = async () => {
     try {
       const response = await fetch(`/api/check-user?phone=${phoneNumber}`);
@@ -31,10 +48,10 @@ const AddGroupMember: React.FC<AddGroupProps> = ({ groupId }) => {
       return data.exists;
     } catch (err) {
       console.error("Error checking user:", err);
+      return false;
     }
   };
 
-  // Function to send invite if the user does not exist
   const sendInvite = async () => {
     try {
       const res = await fetch(`/api/send-invite`, {
@@ -57,8 +74,7 @@ const AddGroupMember: React.FC<AddGroupProps> = ({ groupId }) => {
     }
   };
 
-  // Function to add existing user to the group
-  const addGroupMember = async () => {
+  const addGroupMember = async (userId: string) => {
     try {
       const res = await fetch(`/api/add-group-member`, {
         method: "POST",
@@ -71,7 +87,7 @@ const AddGroupMember: React.FC<AddGroupProps> = ({ groupId }) => {
         alert("Member added successfully!");
         setBackToGroup(true);
       } else if (data.error) {
-        alert(`Error: ${data.error} `);
+        alert(`Error: ${data.error}`);
         setBackToGroup(true);
       }
     } catch (err) {
@@ -84,25 +100,27 @@ const AddGroupMember: React.FC<AddGroupProps> = ({ groupId }) => {
 
     const exists = await checkUserExists();
     if (exists === true) {
-      await addGroupMember();
+      const userId = await getUserId();
+      if (userId) {
+        await addGroupMember(userId);
+      } else {
+        alert("Failed to get user ID.");
+      }
     } else if (exists === false) {
-      sendInvite();
+      await sendInvite();
     } else {
-      alert("User does not exist in web app.");
+      alert("Failed to check if user exists.");
     }
   };
 
-  // Loading state while session is being fetched
   if (status === "loading") {
     return <div>Loading...</div>;
   }
 
-  // If the user is not authenticated, redirect or show an unauthorized message
   if (status === "unauthenticated") {
     return <div>You are not authorized to view this page.</div>;
   }
 
-  // Render content when session is authenticated
   return (
     <div className="max-w-lg mx-auto mt-10 p-6 bg-white shadow-md rounded-lg">
       <h1 className="text-xl font-semibold text-center mb-6">
@@ -127,14 +145,17 @@ const AddGroupMember: React.FC<AddGroupProps> = ({ groupId }) => {
           />
         </div>
 
-        {/* Display message based on whether user exists */}
         {userExists === false && (
           <div>
             <h1 className="mb-4 text-red-500">
               This phone number is not associated with any account. You can send
               an invite to create an account.
             </h1>
-            <button onClick={sendInvite} type="button">
+            <button
+              onClick={sendInvite}
+              type="button"
+              className="w-full p-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+            >
               Send Invite
             </button>
           </div>
@@ -146,17 +167,15 @@ const AddGroupMember: React.FC<AddGroupProps> = ({ groupId }) => {
           </div>
         )}
 
-        {/* Invite button appears only if the user does not exist */}
-        {!userExists && (
+        {userExists === null && (
           <button
             type="submit"
             className="w-full p-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
           >
-            {userExists === null ? "Check and Add Member" : "Send Invite"}
+            Check and Add Member
           </button>
         )}
 
-        {/* Success message for invite */}
         {inviteSent && whatsappUrl && (
           <div className="mt-4 text-green-500">
             Send Invite to {phoneNumber}. The user can join after registering.
@@ -171,8 +190,13 @@ const AddGroupMember: React.FC<AddGroupProps> = ({ groupId }) => {
           </div>
         )}
         {backToGroup && (
-          <div>
-            <Link href={`/group/${groupId}`}>Back to Group</Link>
+          <div className="mt-4">
+            <Link
+              href={`/group/${groupId}`}
+              className="text-blue-500 underline"
+            >
+              Back to Group
+            </Link>
           </div>
         )}
       </form>
