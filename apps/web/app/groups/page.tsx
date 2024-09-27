@@ -20,7 +20,7 @@ export default async function MyGroups() {
                 {group.githubRepo}
               </a>{" "}
               <br />
-              <a href={`group/${group.id}`} className="text-blue-600">
+              <a href={`group/>${group.id}`} className="text-blue-600">
                 {" "}
                 <strong>Group ID:</strong> {group.id}
               </a>

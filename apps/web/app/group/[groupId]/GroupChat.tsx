@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { FaUsers } from "react-icons/fa"; // Importing an icon from react-icons
 
 interface GroupChatProps {
   group: string;
@@ -13,10 +14,16 @@ interface Message {
   content: string;
   createdAt: number;
 }
+
 interface GroupDetails {
   id: string;
   ownerId: string;
 }
+
+interface GroupMember {
+  userId: string;
+}
+
 const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const { data: session } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -24,8 +31,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const wsRef = useRef<WebSocket | null>(null);
   const senderId = session?.user?.id;
   const [groupDetails, setGroupDetails] = useState<GroupDetails | null>(null);
-  console.log(group);
-  console.log(groupDetails);
+  const [isMember, setIsMember] = useState(false);
 
   useEffect(() => {
     const fetchGroupDetails = async () => {
@@ -33,16 +39,22 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         const response = await fetch(`/api/create-group-data?group=${group}`);
         const data = await response.json();
         setGroupDetails(data);
+
+        // Check if the user is a member of the group
+        const memberResponse = await fetch(`/api/group-members?group=${group}`);
+        const members: GroupMember[] = await memberResponse.json();
+        setIsMember(members.some((member) => member.userId === senderId));
       } catch (err) {
         console.error("Error fetching details: ", err);
       }
     };
     fetchGroupDetails();
-  }, [group]);
+  }, [group, senderId]);
+
   useEffect(() => {
     if (session) {
       // Connect to WebSocket
-      wsRef.current = new WebSocket(`ws://http://localhost:8080/${group}`);
+      wsRef.current = new WebSocket(`ws://localhost:8080/${group}`);
 
       wsRef.current.onmessage = (event) => {
         const message = JSON.parse(event.data);
@@ -56,7 +68,11 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   }, [session, group]);
 
   const handleSendMessage = async () => {
-    if (newMessage.trim() && wsRef.current) {
+    if (
+      newMessage.trim() &&
+      wsRef.current &&
+      (isMember || session?.user.id === groupDetails?.ownerId)
+    ) {
       const message = {
         id: group,
         senderId,
@@ -78,7 +94,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
 
   const renderMessages = () => {
     return messages.map((msg) => (
-      <div key={msg.id} style={{ marginBottom: "10px" }}>
+      <div key={msg.id} className="message">
         <strong>{msg.senderId}: </strong>
         <span>{msg.content}</span>
       </div>
@@ -86,44 +102,28 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   };
 
   return (
-    <div
-      style={{
-        padding: "20px",
-        maxWidth: "600px",
-        margin: "auto",
-        border: "1px solid #ccc",
-        borderRadius: "8px",
-        backgroundColor: "#f9f9f9",
-      }}
-    >
-      <h1 style={{ textAlign: "center" }}>Group Chat</h1>
+    <div className="chat-container p-6 max-w-lg mx-auto border border-gray-300 rounded-lg bg-white shadow-md">
+      <h1 className="text-2xl font-bold text-center mb-4">Group Chat</h1>
       {isOwner && (
-        <a
-          href={`/addGroupMember/${group}`}
-          style={{
-            display: "block",
-            margin: "10px auto",
-            padding: "10px 20px",
-            border: "none",
-            borderRadius: "4px",
-            backgroundColor: "#28a745",
-            color: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          Add Member
-        </a>
+        <div className="flex justify-between mb-4">
+          <a
+            href={`/addGroupMember/${group}`}
+            className="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600"
+          >
+            Add Member
+          </a>
+          <a
+            href={`/viewMembers/${group}`}
+            className="flex items-center text-blue-600 hover:text-blue-800"
+          >
+            <FaUsers className="mr-2" />
+            View Members
+          </a>
+        </div>
       )}
-      <div
-        style={{
-          maxHeight: "400px",
-          overflowY: "auto",
-          border: "1px solid #ccc",
-          borderRadius: "4px",
-          padding: "10px",
-          backgroundColor: "#fff",
-        }}
-      >
+      <div className="messages-container max-h-[600px] overflow-y-auto border border-gray-300 rounded p-2 mb-4 bg-gray-50">
+        {" "}
+        {/* Increased size */}
         {renderMessages()}
       </div>
       <input
@@ -131,26 +131,12 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         value={newMessage}
         onChange={(e) => setNewMessage(e.target.value)}
         placeholder="Type a message..."
-        style={{
-          width: "calc(100% - 22px)",
-          padding: "10px",
-          marginTop: "10px",
-          border: "1px solid #ccc",
-          borderRadius: "4px",
-        }}
+        className="border border-gray-300 rounded p-2 w-full mb-2"
       />
       <button
         onClick={handleSendMessage}
-        style={{
-          width: "100%",
-          padding: "10px",
-          marginTop: "10px",
-          border: "none",
-          borderRadius: "4px",
-          backgroundColor: "#007bff",
-          color: "#fff",
-          cursor: "pointer",
-        }}
+        className={`bg-blue-500 text-white py-2 rounded w-full hover:bg-blue-600 ${!isMember && session?.user.id !== groupDetails?.ownerId ? "opacity-50 cursor-not-allowed" : ""}`}
+        disabled={!isMember && session?.user.id !== groupDetails?.ownerId}
       >
         Send
       </button>

@@ -15,6 +15,23 @@ export async function POST(req: Request) {
       );
     }
 
+    const groupExists = await prisma.group.findFirst({
+      where: {
+        ownerId,
+        githubRepo,
+        groupName,
+      },
+    });
+    if (groupExists) {
+      return NextResponse.json(
+        {
+          error:
+            "A group with the same owner, groupId, and GitHub repo already exists.",
+        },
+        { status: 409 }
+      );
+    }
+
     // Create a new group in the database
     const group = await prisma.group.create({
       data: {
@@ -53,7 +70,7 @@ export async function GET(req: Request) {
     // Find group by ID
     const groupDetails = await prisma.group.findUnique({
       where: {
-        id: groupId, // Assuming id is the primary key
+        id: groupId,
       },
     });
 
