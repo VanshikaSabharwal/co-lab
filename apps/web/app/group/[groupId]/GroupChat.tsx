@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { FaUsers } from "react-icons/fa"; // Importing an icon from react-icons
+import { FaUsers } from "react-icons/fa";
 
 interface GroupChatProps {
   group: string;
@@ -20,10 +20,6 @@ interface GroupDetails {
   ownerId: string;
 }
 
-interface GroupMember {
-  userId: string;
-}
-
 const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const { data: session } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -33,6 +29,28 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const [groupDetails, setGroupDetails] = useState<GroupDetails | null>(null);
   const [isMember, setIsMember] = useState(false);
 
+  // Fetch group members and check if current user is a member
+  const fetchMembers = async () => {
+    try {
+      const res = await fetch(
+        `/api/check-group-member?group=${group}&userId=${senderId}`,
+        {
+          method: "GET", // Use GET for fetching data
+        }
+      );
+      const data = await res.json();
+      if (data.exists) {
+        setIsMember(true);
+      } else {
+        alert("Can't send message as you are not a part of the group");
+        setIsMember(false);
+      }
+    } catch (err) {
+      console.log("Error: ", err);
+    }
+  };
+
+  // Fetch group details
   useEffect(() => {
     const fetchGroupDetails = async () => {
       try {
@@ -44,10 +62,12 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
       }
     };
     fetchGroupDetails();
-  }, [group, senderId]);
+  }, [group]);
 
+  // Check membership when session changes
   useEffect(() => {
     if (session) {
+      fetchMembers(); // Fetch members when session is available
       // Connect to WebSocket
       wsRef.current = new WebSocket(`ws://localhost:8080/${group}`);
 
@@ -60,7 +80,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         wsRef.current?.close();
       };
     }
-  }, [session, group]);
+  }, [session, group, senderId]);
 
   const handleSendMessage = async () => {
     if (
@@ -69,7 +89,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
       (isMember || session?.user.id === groupDetails?.ownerId)
     ) {
       const message = {
-        id: group,
+        id: Date.now().toString(), // Use timestamp for unique ID
         senderId,
         groupId: group,
         content: newMessage,
@@ -82,6 +102,8 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
       // Update state for instant UI feedback
       setMessages((prevMessages) => [...prevMessages, message]);
       setNewMessage("");
+    } else {
+      alert("You cannot send messages.");
     }
   };
 
@@ -89,7 +111,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
 
   const renderMessages = () => {
     return messages.map((msg) => (
-      <div key={msg.id} className="message">
+      <div key={msg.id} className="message mb-2">
         <strong>{msg.senderId}: </strong>
         <span>{msg.content}</span>
       </div>
@@ -118,8 +140,6 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         </div>
       )}
       <div className="messages-container max-h-[600px] overflow-y-auto border border-gray-300 rounded p-2 mb-4 bg-gray-50">
-        {" "}
-        {/* Increased size */}
         {renderMessages()}
       </div>
       <input
