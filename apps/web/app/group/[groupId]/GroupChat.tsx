@@ -10,6 +10,7 @@ interface GroupChatProps {
 interface Message {
   id: string;
   senderId: string | undefined;
+  senderName: string | undefined;
   groupId: string;
   content: string;
   createdAt: number;
@@ -21,54 +22,53 @@ interface GroupDetails {
 }
 
 const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
-  const senderId = session?.user?.id;
   const [groupDetails, setGroupDetails] = useState<GroupDetails | null>(null);
   const [isMember, setIsMember] = useState(false);
+  const [loadingGroupDetails, setLoadingGroupDetails] = useState(true);
 
-  // Fetch group members and check if current user is a member
-  const fetchMembers = async () => {
-    try {
-      const res = await fetch(
-        `/api/check-group-member?group=${group}&userId=${senderId}`,
-        {
-          method: "GET", // Use GET for fetching data
+  const senderId = session?.user?.id;
+  const senderName = session?.user.name;
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      const fetchGroupDetails = async () => {
+        try {
+          const response = await fetch(`/api/create-group-data?group=${group}`);
+          const data = await response.json();
+          setGroupDetails(data);
+        } catch (err) {
+          console.error("Error fetching details: ", err);
+        } finally {
+          setLoadingGroupDetails(false);
         }
-      );
-      const data = await res.json();
-      if (data.exists) {
-        setIsMember(true);
-      } else {
-        alert("Can't send message as you are not a part of the group");
-        setIsMember(false);
-      }
-    } catch (err) {
-      console.log("Error: ", err);
+      };
+
+      fetchGroupDetails();
     }
-  };
+  }, [group, status]);
 
-  // Fetch group details
   useEffect(() => {
-    const fetchGroupDetails = async () => {
-      try {
-        const response = await fetch(`/api/create-group-data?group=${group}`);
-        const data = await response.json();
-        setGroupDetails(data);
-      } catch (err) {
-        console.error("Error fetching details: ", err);
-      }
-    };
-    fetchGroupDetails();
-  }, [group]);
+    if (session && groupDetails) {
+      const fetchMembers = async () => {
+        try {
+          const res = await fetch(
+            `/api/check-group-member?group=${group}&userId=${senderId}`,
+            {
+              method: "GET",
+            }
+          );
+          const data = await res.json();
+          setIsMember(data.exists);
+        } catch (err) {
+          console.log("Error: ", err);
+        }
+      };
 
-  // Check membership when session changes
-  useEffect(() => {
-    if (session) {
-      fetchMembers(); // Fetch members when session is available
-      // Connect to WebSocket
+      fetchMembers();
       wsRef.current = new WebSocket(`ws://localhost:8080/${group}`);
 
       wsRef.current.onmessage = (event) => {
@@ -80,7 +80,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         wsRef.current?.close();
       };
     }
-  }, [session, group, senderId]);
+  }, [session, groupDetails, group, senderId]);
 
   const handleSendMessage = async () => {
     if (
@@ -89,17 +89,16 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
       (isMember || session?.user.id === groupDetails?.ownerId)
     ) {
       const message = {
-        id: Date.now().toString(), // Use timestamp for unique ID
+        id: Date.now().toString(),
         senderId,
+        senderName,
         groupId: group,
         content: newMessage,
         createdAt: Date.now(),
       };
 
-      // Send message to WebSocket server
       wsRef.current.send(JSON.stringify(message));
 
-      // Update state for instant UI feedback
       setMessages((prevMessages) => [...prevMessages, message]);
       setNewMessage("");
     } else {
@@ -107,12 +106,24 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
     }
   };
 
-  const isOwner = session?.user.id === groupDetails?.ownerId;
+  if (loadingGroupDetails) {
+    return <div>Loading group details...</div>; // Show loading for group details
+  }
 
+  if (status === "loading") {
+    return <div>Loading session...</div>; // Loading state
+  }
+
+  if (!session) {
+    return <div>You are not logged in</div>; // Not logged in
+  }
+
+  const isOwner = session?.user.id === groupDetails?.ownerId;
+  console.log("Received Messages: ", messages);
   const renderMessages = () => {
     return messages.map((msg) => (
       <div key={msg.id} className="message mb-2">
-        <strong>{msg.senderId}: </strong>
+        <strong>{msg.senderName}: </strong>
         <span>{msg.content}</span>
       </div>
     ));
@@ -130,15 +141,15 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
           >
             Add Member
           </a>
-          <a
-            href={`/viewMembers/${group}`}
-            className="flex items-center text-blue-600 hover:text-blue-800"
-          >
-            <FaUsers className="mr-2" />
-            View Members
-          </a>
         </div>
       )}
+      <a
+        href={`/viewMembers/${group}`}
+        className="flex items-center text-blue-600 hover:text-blue-800"
+      >
+        <FaUsers className="mr-2" />
+        View Members
+      </a>
       <div className="messages-container max-h-[600px] overflow-y-auto border border-gray-300 rounded p-2 mb-4 bg-gray-50">
         {renderMessages()}
       </div>

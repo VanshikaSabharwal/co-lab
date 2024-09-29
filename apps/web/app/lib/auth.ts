@@ -111,6 +111,7 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.email = user.email;
         token.phone = user.phone;
+        token.name = user.name;
       }
       return token;
     },
@@ -119,6 +120,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.sub as string;
         session.user.phone = token.phone as string;
+        session.user.name = token.name as string;
       }
       return session;
     },

@@ -30,25 +30,6 @@ redisSubClient.subscribe("chat-channel", (err, count) => {
 redisSubClient.on("message", (channel, message) => {
   if (channel === "chat-channel") {
     console.log("Broadcasting message to WebSocket clients:", message);
-    const parsedMessage = JSON.parse(message);
-    const { recipientId, groupId } = parsedMessage;
-
-    // Check if the message is for a group or individual
-    if (groupId) {
-      // Broadcast to all clients in the specified group
-      const clients = groupClients.get(groupId) || [];
-      clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(message);
-        }
-      });
-    } else if (recipientId) {
-      // Send to individual recipient
-      const recipientClient = individualClients.get(recipientId);
-      if (recipientClient && recipientClient.readyState === WebSocket.OPEN) {
-        recipientClient.send(message);
-      }
-    }
   }
 });
 
@@ -66,8 +47,15 @@ wss.on("connection", (ws, req) => {
     const parsedMessage = JSON.parse(message.toString());
 
     // Publish message to Redis
-    redisPublishClient.publish("chat-channel", message.toString());
-
+    redisPublishClient.publish(
+      "chat-channel",
+      JSON.stringify({
+        content: parsedMessage.content,
+        senderName: parsedMessage.senderName,
+        groupId: parsedMessage.groupId,
+        createdAt: parsedMessage.createdAt,
+      })
+    );
     // Cache the message in Redis
     await redisClient.set(`message:${Date.now()}`, message.toString());
     console.log("Message cached in Redis");

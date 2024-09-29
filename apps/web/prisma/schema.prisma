@@ -20,6 +20,7 @@ model User {
   receivedFriendships Friendship[]  @relation("FriendshipReceiver")
   ownedGroups         Group[]       @relation("OwnerGroups")
   groupMembers        GroupMember[] @relation("UserGroups")
+  groupMessages       GroupMessages[] @relation("GroupMessages")
 }
 
 model Friendship {
@@ -97,6 +98,15 @@ model Invite {
   @@unique([phone, groupId])
 }
 
+
+model GroupMessages{
+  id        String   @id @default(cuid())
+  groupId   String
+  message   String
+  createdAt DateTime
+  senderId  String
+  user      User     @relation("GroupMessages", fields: [senderId], references: [id])
+}
 enum GroupRole {
   ADMIN
   MEMBER
