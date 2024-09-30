@@ -14,8 +14,8 @@ app.use(Express.json());
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
-const groupClients = new Map(); // To track clients in groups
-const individualClients = new Map(); // To track individual clients
+const groupClients = new Map();
+const individualClients = new Map();
 
 // Subscribe to Redis channel for incoming messages
 redisSubClient.subscribe("chat-channel", (err, count) => {
@@ -29,7 +29,22 @@ redisSubClient.subscribe("chat-channel", (err, count) => {
 // Broadcast incoming Redis messages to WebSocket clients
 redisSubClient.on("message", (channel, message) => {
   if (channel === "chat-channel") {
+    const parsedMessage = JSON.parse(message);
+    console.log(parsedMessage);
+    const { groupId } = parsedMessage;
+
     console.log("Broadcasting message to WebSocket clients:", message);
+
+    // Broadcast to group members if it's a group message
+    // if (groupId && groupClients.has(groupId)) {
+    //   const groupMembers = groupClients.get(groupId);
+
+    //   groupMembers.forEach((client) => {
+    //     if (client.readyState === WebSocket.OPEN) {
+    //       client.send(message);
+    //     }
+    //   });
+    // }
   }
 });
 
@@ -37,52 +52,71 @@ redisSubClient.on("message", (channel, message) => {
 wss.on("connection", (ws, req) => {
   console.log("Client connected");
 
-  // Extract userId from request (assume it's sent in a query parameter)
-  const userId = req.url.split("?userId=")[1]; // Example: ?userId=123
-  individualClients.set(userId, ws); // Track this client for individual messages
+  const urlParams = new URLSearchParams(req.url.split("?")[1]);
+  const userId = urlParams.get("userId");
+  const groupId = urlParams.get("groupId");
 
-  // Handle incoming WebSocket messages
+  if (userId) {
+    individualClients.set(userId, ws);
+    console.log("Client connected", userId);
+  }
+
+  if (groupId) {
+    if (!groupClients.has(groupId)) {
+      groupClients.set(groupId, new Map());
+    }
+    groupClients.get(groupId).set(userId, ws);
+    console.log(`Client ${userId} joined group ${groupId}`);
+  }
+
+  // WebSocket message handling
   ws.on("message", async (message) => {
     console.log("WebSocket received message:", message.toString());
     const parsedMessage = JSON.parse(message.toString());
 
     // Publish message to Redis
-    redisPublishClient.publish(
-      "chat-channel",
-      JSON.stringify({
-        content: parsedMessage.content,
-        senderName: parsedMessage.senderName,
-        groupId: parsedMessage.groupId,
-        createdAt: parsedMessage.createdAt,
-      })
-    );
+    redisPublishClient.publish("chat-channel", JSON.stringify(parsedMessage));
+
     // Cache the message in Redis
     await redisClient.set(`message:${Date.now()}`, message.toString());
     console.log("Message cached in Redis");
 
-    // If it's a group message, add the client to the group
-    if (parsedMessage.groupId) {
-      if (!groupClients.has(parsedMessage.groupId)) {
-        groupClients.set(parsedMessage.groupId, []);
-      }
-      groupClients.get(parsedMessage.groupId).push(ws);
+    // Broadcast the message to all clients in the group
+    if (parsedMessage.groupId && groupClients.has(parsedMessage.groupId)) {
+      const groupMembers = groupClients.get(parsedMessage.groupId);
+      groupMembers.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(parsedMessage));
+        }
+      });
     }
   });
 
   // Handle WebSocket disconnection
   ws.on("close", () => {
     console.log("WebSocket connection closed");
-    individualClients.delete(userId); // Remove the client from individual tracking
+
+    // Remove the client from individual tracking
+    for (const [id, client] of individualClients.entries()) {
+      if (client === ws) {
+        individualClients.delete(id);
+        console.log(`Client ${id} removed from individual tracking`);
+        break;
+      }
+    }
 
     // Remove the client from any groups they are part of
-    for (const [groupId, clients] of groupClients.entries()) {
-      const index = clients.indexOf(ws);
-      if (index !== -1) {
-        clients.splice(index, 1);
-        if (clients.length === 0) {
-          groupClients.delete(groupId); // Remove group if no clients left
+    for (const [gId, clients] of groupClients.entries()) {
+      for (const [uId, client] of clients.entries()) {
+        if (client === ws) {
+          clients.delete(uId);
+          console.log(`Client ${uId} removed from group ${gId}`);
+          if (clients.size === 0) {
+            groupClients.delete(gId);
+            console.log(`Group ${gId} removed as it has no more clients`);
+          }
+          break;
         }
-        break;
       }
     }
   });

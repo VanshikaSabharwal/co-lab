@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { FaUsers } from "react-icons/fa";
+import { FaUsers, FaPaperPlane } from "react-icons/fa";
+import toast from "react-hot-toast";
 
 interface GroupChatProps {
   group: string;
@@ -19,6 +20,8 @@ interface Message {
 interface GroupDetails {
   id: string;
   ownerId: string;
+  githubRepo: string;
+  groupName: string;
 }
 
 const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
@@ -29,9 +32,27 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const [groupDetails, setGroupDetails] = useState<GroupDetails | null>(null);
   const [isMember, setIsMember] = useState(false);
   const [loadingGroupDetails, setLoadingGroupDetails] = useState(true);
+  const [loadingPercentage, setLoadingPercentage] = useState(0);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const senderId = session?.user?.id;
-  const senderName = session?.user.name;
+  const senderName = session?.user?.name;
+  const isOwner = session?.user.id === groupDetails?.ownerId;
+
+  const fetchMessages = async () => {
+    if (group) {
+      try {
+        const res = await fetch(`/api/save-group-message?group=${group}`, {
+          method: "GET",
+        });
+        const data: Message[] = await res.json();
+        setMessages(data);
+      } catch (err) {
+        console.error("Error fetching messages: ", err);
+        toast.error("Failed to fetch messages");
+      }
+    }
+  };
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -42,12 +63,25 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
           setGroupDetails(data);
         } catch (err) {
           console.error("Error fetching details: ", err);
+          toast.error("Failed to fetch group details");
         } finally {
           setLoadingGroupDetails(false);
         }
       };
 
+      fetchMessages();
       fetchGroupDetails();
+
+      // Simulate loading percentage
+      let interval = setInterval(() => {
+        setLoadingPercentage((prev) => {
+          if (prev < 100) return prev + 1;
+          clearInterval(interval);
+          return prev;
+        });
+      }, 10); // Increase every 10ms to reach 100% in approx 1 second
+
+      return () => clearInterval(interval);
     }
   }, [group, status]);
 
@@ -56,117 +90,221 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
       const fetchMembers = async () => {
         try {
           const res = await fetch(
-            `/api/check-group-member?group=${group}&userId=${senderId}`,
-            {
-              method: "GET",
-            }
+            `/api/check-group-member?group=${group}&userId=${senderId}`
           );
           const data = await res.json();
           setIsMember(data.exists);
         } catch (err) {
           console.log("Error: ", err);
+          toast.error("Failed to check group membership");
         }
       };
 
       fetchMembers();
-      wsRef.current = new WebSocket(`ws://localhost:8080/${group}`);
 
-      wsRef.current.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        setMessages((prevMessages) => [...prevMessages, message]);
-      };
+      // Establish WebSocket connection
+      if (!wsRef.current) {
+        wsRef.current = new WebSocket(
+          `ws://localhost:8080?userId=${senderId}&groupId=${group}`
+        );
+
+        // Handle incoming WebSocket messages
+        wsRef.current.onmessage = (event) => {
+          const message = JSON.parse(event.data);
+          setMessages((prevMessages) => [
+            ...prevMessages,
+            {
+              id: message.id,
+              senderId: message.senderId,
+              senderName: message.senderName,
+              groupId: message.groupId,
+              content: message.content,
+              createdAt: message.createdAt,
+            },
+          ]);
+        };
+
+        // Handle WebSocket connection closure
+        wsRef.current.onclose = () => {
+          console.log("WebSocket closed, attempting to reconnect...");
+          wsRef.current = null;
+        };
+      }
 
       return () => {
         wsRef.current?.close();
+        wsRef.current = null; // Cleanup WebSocket connection
       };
     }
   }, [session, groupDetails, group, senderId]);
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   const handleSendMessage = async () => {
-    if (
-      newMessage.trim() &&
-      wsRef.current &&
-      (isMember || session?.user.id === groupDetails?.ownerId)
-    ) {
+    const isOwner = session?.user.id === groupDetails?.ownerId;
+
+    if (newMessage.trim() && wsRef.current && (isMember || isOwner)) {
+      const generateId = () => `${Date.now()}-${Math.random()}`;
       const message = {
-        id: Date.now().toString(),
+        id: generateId(),
+        content: newMessage,
+        groupId: group,
         senderId,
         senderName,
-        groupId: group,
-        content: newMessage,
         createdAt: Date.now(),
       };
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify(message));
+        setNewMessage("");
+      }
 
-      wsRef.current.send(JSON.stringify(message));
+      try {
+        const response = await fetch("/api/save-group-message", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(message),
+        });
 
-      setMessages((prevMessages) => [...prevMessages, message]);
-      setNewMessage("");
+        if (!response.ok) {
+          throw new Error("Failed to save message");
+        }
+
+        await response.json();
+      } catch (error) {
+        console.error("Failed to save message:", error);
+        toast.error("Failed to send message");
+      }
     } else {
-      alert("You cannot send messages.");
+      toast.error("You cannot send messages.");
     }
   };
 
   if (loadingGroupDetails) {
-    return <div>Loading group details...</div>; // Show loading for group details
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
+          <div className="mt-4 text-xl">{loadingPercentage}%</div>
+        </div>
+      </div>
+    );
   }
 
   if (status === "loading") {
-    return <div>Loading session...</div>; // Loading state
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-blue-500"></div>
+          <div className="mt-4 text-xl">{loadingPercentage}%</div>
+        </div>
+      </div>
+    );
   }
 
   if (!session) {
-    return <div>You are not logged in</div>; // Not logged in
+    return (
+      <div className="flex justify-center items-center h-screen text-2xl font-bold text-red-500">
+        You are not logged in
+      </div>
+    );
   }
 
-  const isOwner = session?.user.id === groupDetails?.ownerId;
-  console.log("Received Messages: ", messages);
-  const renderMessages = () => {
-    return messages.map((msg) => (
-      <div key={msg.id} className="message mb-2">
-        <strong>{msg.senderName}: </strong>
-        <span>{msg.content}</span>
-      </div>
-    ));
-  };
-
   return (
-    <div className="chat-container p-6 max-w-lg mx-auto border border-gray-300 rounded-lg bg-white shadow-md">
-      <h1 className="text-2xl font-bold text-center mb-4">Group Chat</h1>
-      <h2>Group Id: {group}</h2>
-      {isOwner && (
-        <div className="flex justify-between mb-4">
-          <a
-            href={`/addGroupMember/${group}`}
-            className="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600"
+    <div className="flex flex-col h-screen  bg-gray-100">
+      <div className="flex-1 overflow-hidden">
+        <div className="max-w-3xl mx-auto bg-white shadow-lg rounded-lg overflow-hidden flex flex-col h-full">
+          <div className="bg-blue-500 text-white p-4">
+            <h1 className="text-2xl font-bold text-center">
+              {groupDetails?.groupName}
+            </h1>
+            <h2 className="text-sm text-center mt-1">Group ID: {group}</h2>
+          </div>
+          <div
+            className="flex-1 overflow-y-auto p-4"
+            style={{ maxHeight: "calc(100vh - 240px)" }}
           >
-            Add Member
+            {messages.map((msg, index) => (
+              <div
+                key={index}
+                className={`flex mb-4 ${
+                  msg.senderId === session?.user?.id
+                    ? "justify-end"
+                    : "justify-start"
+                }`}
+              >
+                <div
+                  className={`max-w-xs lg:max-w-md xl:max-w-lg break-words p-3 rounded-lg ${
+                    msg.senderId === session?.user?.id
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200 text-black"
+                  }`}
+                >
+                  <p className="font-bold mb-1">{msg.senderName}</p>
+                  <p>{msg.content}</p>
+                  <p className="text-xs mt-1 opacity-75">
+                    {new Date(msg.createdAt).toLocaleTimeString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+          <div className="bg-gray-100 p-4">
+            <div className="flex items-center">
+              <input
+                type="text"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Type a message..."
+                className="flex-1 border border-gray-300 rounded-l-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+              />
+              <button
+                onClick={handleSendMessage}
+                className={`bg-blue-500 text-white p-2 rounded-r-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  !isMember && session?.user.id !== groupDetails?.ownerId
+                    ? "opacity-50 cursor-not-allowed"
+                    : ""
+                }`}
+                disabled={
+                  !isMember && session?.user.id !== groupDetails?.ownerId
+                }
+              >
+                <FaPaperPlane />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="bg-white shadow-lg rounded-lg mt-4 p-8 max-w-3xl mx-auto">
+        <div className="flex justify-between items-center gap-2">
+          {isOwner && (
+            <a
+              href={`/addGroupMember/${group}`}
+              className="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600 transition duration-300"
+            >
+              Add Member
+            </a>
+          )}
+          <a
+            href={`/viewMembers/${group}`}
+            className="flex items-center text-blue-600 hover:text-blue-800 transition duration-300"
+          >
+            <FaUsers className="mr-2" />
+            View Members
+          </a>
+          <a
+            href={groupDetails?.githubRepo}
+            className="bg-gray-800 text-white py-2 px-4 rounded hover:bg-gray-700 transition duration-300"
+          >
+            GitHub Repo
           </a>
         </div>
-      )}
-      <a
-        href={`/viewMembers/${group}`}
-        className="flex items-center text-blue-600 hover:text-blue-800"
-      >
-        <FaUsers className="mr-2" />
-        View Members
-      </a>
-      <div className="messages-container max-h-[600px] overflow-y-auto border border-gray-300 rounded p-2 mb-4 bg-gray-50">
-        {renderMessages()}
       </div>
-      <input
-        type="text"
-        value={newMessage}
-        onChange={(e) => setNewMessage(e.target.value)}
-        placeholder="Type a message..."
-        className="border border-gray-300 rounded p-2 w-full mb-2"
-      />
-      <button
-        onClick={handleSendMessage}
-        className={`bg-blue-500 text-white py-2 rounded w-full hover:bg-blue-600 ${!isMember && session?.user.id !== groupDetails?.ownerId ? "opacity-50 cursor-not-allowed" : ""}`}
-        disabled={!isMember && session?.user.id !== groupDetails?.ownerId}
-      >
-        Send
-      </button>
     </div>
   );
 };

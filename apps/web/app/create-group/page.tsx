@@ -89,7 +89,7 @@ const CreateGroup = () => {
             {groups.map((group) => (
               <li key={group.id} className="p-4 border rounded-lg">
                 <strong>Group Name:</strong> {group.groupName} <br />
-                <strong>GitHub Repo:</strong> {group.githubRepo} <br />
+                <a href={group.githubRepo}>GitHub Repo:{group.githubRepo}</a>
                 <a href={`group/${group.id}`}>
                   {" "}
                   <strong>Group ID:</strong> {group.id}

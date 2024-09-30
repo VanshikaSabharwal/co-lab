@@ -8,8 +8,6 @@ import { GrPowerCycle } from "react-icons/gr";
 
 const SignUp = () => {
   const router = useRouter();
-  const { searchParams } = new URL(window.location.href);
-  const referral = searchParams.get("referral");
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -94,13 +92,6 @@ const SignUp = () => {
       const result = await response.json();
 
       if (response.ok) {
-        if (referral) {
-          await fetch("/api/send-invite", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: result.id, groupId: referral }),
-          });
-        }
         toast.success("User Created Successfully. Please Login now");
         router.push("/api/auth/signin");
       } else {

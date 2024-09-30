@@ -8,18 +8,18 @@ datasource db {
 }
 
 model User {
-  id                  String        @id @default(cuid())
-  email               String        @unique
+  id                  String          @id @default(cuid())
+  email               String          @unique
   password            String
-  username            String        @unique
-  phone               String        @unique
-  chats               Chat[]        @relation("ChatParticipants")
-  sentMessages        Messages[]    @relation("SenderMessages")
-  receivedMessages    Messages[]    @relation("RecipientMessages")
-  sentFriendships     Friendship[]  @relation("FriendshipSender")
-  receivedFriendships Friendship[]  @relation("FriendshipReceiver")
-  ownedGroups         Group[]       @relation("OwnerGroups")
-  groupMembers        GroupMember[] @relation("UserGroups")
+  username            String          @unique
+  phone               String          @unique
+  chats               Chat[]          @relation("ChatParticipants")
+  sentMessages        Messages[]      @relation("SenderMessages")
+  receivedMessages    Messages[]      @relation("RecipientMessages")
+  sentFriendships     Friendship[]    @relation("FriendshipSender")
+  receivedFriendships Friendship[]    @relation("FriendshipReceiver")
+  ownedGroups         Group[]         @relation("OwnerGroups")
+  groupMembers        GroupMember[]   @relation("UserGroups")
   groupMessages       GroupMessages[] @relation("GroupMessages")
 }
 
@@ -66,13 +66,14 @@ model Otp {
 }
 
 model Group {
-  id         String        @id @default(cuid())
-  groupName  String
-  githubRepo String
-  ownerId    String
-  createdAt  DateTime      @default(now())
-  owner      User?         @relation("OwnerGroups", fields: [ownerId], references: [id])
-  members    GroupMember[] @relation("GroupToMembers")
+  id           String          @id @default(cuid())
+  groupName    String
+  githubRepo   String
+  ownerId      String
+  createdAt    DateTime        @default(now())
+  owner        User?           @relation("OwnerGroups", fields: [ownerId], references: [id])
+  members      GroupMember[]   @relation("GroupToMembers")
+  groupMessage GroupMessages[] @relation("GroupMessage")
 }
 
 model GroupMember {
@@ -93,20 +94,21 @@ model Invite {
   groupId   String
   status    String   @default("pending")
   createdAt DateTime
- 
 
   @@unique([phone, groupId])
 }
 
-
-model GroupMessages{
-  id        String   @id @default(cuid())
-  groupId   String
-  message   String
-  createdAt DateTime
-  senderId  String
-  user      User     @relation("GroupMessages", fields: [senderId], references: [id])
+model GroupMessages {
+  id         String   @id @default(cuid())
+  groupId    String
+  senderId   String
+  senderName String?
+  message    String
+  createdAt  DateTime
+  user       User     @relation("GroupMessages", fields: [senderId], references: [id])
+  group      Group    @relation("GroupMessage", fields: [groupId], references: [id])
 }
+
 enum GroupRole {
   ADMIN
   MEMBER
