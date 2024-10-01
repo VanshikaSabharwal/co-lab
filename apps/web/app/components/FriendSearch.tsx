@@ -43,8 +43,8 @@ const FriendSearch = () => {
   }
 
   return (
-    <div className="w-full p-6 bg-white shadow-lg rounded-lg border border-gray-200">
-      <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800">
+    <div className="w-full py-2 px-3 bg-white shadow-lg rounded-lg border border-gray-200">
+      <h1 className="text-l sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800">
         Search for a Friend
       </h1>
       <form onSubmit={handleSearch} className="flex flex-col space-y-4">
@@ -58,7 +58,7 @@ const FriendSearch = () => {
         />
         <button
           type="submit"
-          className="w-full py-3 px-4 bg-pink-600 hover:bg-pink-500 text-white font-semibold rounded-md transition duration-200 ease-in-out"
+          className="w-full py-3 px-4 bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-md transition duration-200 ease-in-out"
         >
           Search
         </button>

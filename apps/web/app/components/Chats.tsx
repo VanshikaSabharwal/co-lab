@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import FriendSearch from "../components/FriendSearch";
 
@@ -12,11 +11,38 @@ const contacts = [
   { id: "3", name: "Contact 3", phone: "345-678-9012" },
 ];
 
+interface Group {
+  id: string;
+  name: string;
+  members: Array<{ userId: string }>;
+  groupName: string;
+  githubRepo: string;
+}
+
 const ChatApp = () => {
   const { data: session } = useSession();
   const [selectedChat, setSelectedChat] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const router = useRouter();
+  const user = session?.user.id;
+  const [groups, setGroups] = useState<Group[]>([]);
+
+  // fetch all groups in which user is either a member or owner
+  useEffect(() => {
+    const fetchGroups = async () => {
+      if (session?.user?.id) {
+        try {
+          const res = await fetch(`/api/my-groups?userId=${user}`);
+          const data = await res.json();
+          // Ensure data.groups is an array
+          setGroups(Array.isArray(data.groups) ? data.groups : []);
+        } catch (error) {
+          console.error("Error fetching groups:", error);
+          setGroups([]); // Set to empty array on error
+        }
+      }
+    };
+    fetchGroups();
+  }, [session]);
 
   // Filter contacts based on search term
   const filteredContacts = contacts.filter(
@@ -26,27 +52,46 @@ const ChatApp = () => {
   );
 
   return session ? (
-    <div className="flex h-screen bg-[#f5c6e0]">
+    <div className="flex h-screen ">
       {/* Left side: Contact List */}
-      <div className="w-full md:w-1/4 bg-[#e0a1d0] text-white p-4 flex flex-col justify-between">
+      <div className="w-full md:w-1/4 text-black-500 p-4 flex flex-col justify-between h-full">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-6">Contacts</h1>
+          <h1 className="text-2xl font-bold text-black-500 mb-6">Contacts</h1>
           <FriendSearch />
-          <div className="mt-4 space-y-4">
-            {filteredContacts.map((contact) => (
-              <div
-                key={contact.id}
-                className="bg-[#d1a1d0] p-3 rounded-md hover:bg-[#c590c9] transition-colors"
-              >
-                <h2 className="text-lg font-semibold">{contact.name}</h2>
-                <p className="text-sm">{contact.phone}</p>
-              </div>
-            ))}
-          </div>
         </div>
 
+        {groups.length > 0 && (
+          <div className="mt-8 w-full max-w-md">
+            <h2 className="text-xl text-black-500 font-bold mb-4">
+              My Groups:
+            </h2>
+            <ul className="space-y-4">
+              {groups.map((group) => (
+                <li
+                  key={group.id}
+                  className="bg-blue-500 hover:bg-blue-400  p-4 rounded-md  transition-colors"
+                >
+                  <strong>Group Name:</strong> {group.groupName} <br />
+                  <a
+                    href={group.githubRepo}
+                    className="text-blue-200 underline hover:text-blue-300"
+                  >
+                    GitHub Repo: {group.githubRepo}
+                  </a>
+                  <a
+                    href={`group/${group.id}`}
+                    className="block mt-2 text-blue-200 underline hover:text-blue-300"
+                  >
+                    Group ID: {group.id}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Bottom section: Email and Phone */}
-        <div className="border-t border-white mt-6 pt-4 text-center">
+        <div className="border-t border-blue-200 text-black-500 mt-6 pt-4 text-center">
           <p className="text-sm">
             <strong>Email:</strong> {session?.user?.email || "User"}
           </p>
@@ -60,13 +105,13 @@ const ChatApp = () => {
       <div
         className={`${
           selectedChat ? "block" : "hidden md:block"
-        } w-full md:w-3/4 bg-[#e5b6e5] p-6 flex flex-col justify-between`}
+        } w-full md:w-3/4 bg-blue-100 p-6 flex flex-col justify-between h-full`}
       >
         {/* Chat content can go here */}
       </div>
     </div>
   ) : (
-    <p>Please Sign In to see chats</p>
+    <p className="text-center text-blue-600">Please Sign In to see chats</p>
   );
 };
 
