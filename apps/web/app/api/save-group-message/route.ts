@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       throw new Error("Missing required fields");
     }
 
-    const createdMessage = await prisma.groupMessages.create({
+    const createdMessage = await prisma.groupMessage.create({
       data: {
         groupId,
         senderId: senderId || "",
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const messages = await prisma.groupMessages.findMany({
+    const messages = await prisma.groupMessage.findMany({
       where: {
         groupId: groupId,
       },

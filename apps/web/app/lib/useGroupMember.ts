@@ -26,7 +26,7 @@ const useGroupMembers = (groupId: string) => {
         const data = await response.json();
         setMembers(data);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       } finally {
         setLoading(false);
       }

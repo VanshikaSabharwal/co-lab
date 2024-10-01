@@ -20,7 +20,7 @@ model User {
   receivedFriendships Friendship[]    @relation("FriendshipReceiver")
   ownedGroups         Group[]         @relation("OwnerGroups")
   groupMembers        GroupMember[]   @relation("UserGroups")
-  groupMessages       GroupMessages[] @relation("GroupMessages")
+  groupMessages       GroupMessage[] @relation("GroupMessages")
 }
 
 model Friendship {
@@ -73,7 +73,7 @@ model Group {
   createdAt    DateTime        @default(now())
   owner        User?           @relation("OwnerGroups", fields: [ownerId], references: [id])
   members      GroupMember[]   @relation("GroupToMembers")
-  groupMessage GroupMessages[] @relation("GroupMessage")
+  groupMessage GroupMessage[] @relation("GroupMessage")
 }
 
 model GroupMember {
@@ -98,13 +98,13 @@ model Invite {
   @@unique([phone, groupId])
 }
 
-model GroupMessages {
+model GroupMessage {
   id         String   @id @default(cuid())
   groupId    String
   senderId   String
   senderName String?
   message    String
-  createdAt  DateTime
+ createdAt DateTime @default(now())
   user       User     @relation("GroupMessages", fields: [senderId], references: [id])
   group      Group    @relation("GroupMessage", fields: [groupId], references: [id])
 }
