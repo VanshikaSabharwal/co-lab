@@ -1,6 +1,7 @@
 import WebSocket, { WebSocketServer } from "ws";
 import http from "http";
 import Express from "express";
+import { Console } from "console";
 
 const app = Express();
 const port = 8080;
@@ -37,6 +38,18 @@ wss.on("connection", (ws, req) => {
   ws.on("message", (message) => {
     console.log("WebSocket received message:", message.toString());
     const parsedMessage = JSON.parse(message.toString());
+
+    // one to one msg sending
+    const recipientWs = individualClients.get(parsedMessage.recipientId);
+
+    if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
+      console.log(`Sending message to recipient ${parsedMessage.recipientId}`);
+      recipientWs.send(JSON.stringify(parsedMessage));
+    } else {
+      console.log(
+        `Recipient ${parsedMessage.recipientId} not found or not connected`
+      );
+    }
 
     // Broadcast the message to all clients in the group
     if (parsedMessage.groupId && groupClients.has(parsedMessage.groupId)) {
