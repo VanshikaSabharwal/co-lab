@@ -41,7 +41,9 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
   useEffect(() => {
     if (status === "authenticated" && session?.user?.phone) {
       const connectWebSocket = () => {
-        const ws = new WebSocket(`ws://localhost:8080?userId=${userId}`);
+        const ws = new WebSocket(
+          `https://code-co-lab-crew.onrender.com?userId=${userId}`
+        );
         wsRef.current = ws;
 
         ws.onmessage = async (event) => {

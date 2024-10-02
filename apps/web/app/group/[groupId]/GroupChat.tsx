@@ -79,8 +79,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
           clearInterval(interval);
           return prev;
         });
-      }, 10); // Increase every 10ms to reach 100% in approx 1 second
-
+      }, 10);
       return () => clearInterval(interval);
     }
   }, [group, status]);
@@ -105,7 +104,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
       // Establish WebSocket connection
       if (!wsRef.current) {
         wsRef.current = new WebSocket(
-          `ws://localhost:8080?userId=${senderId}&groupId=${group}`
+          `https://code-co-lab-crew.onrender.com?userId=${senderId}&groupId=${group}`
         );
 
         // Handle incoming WebSocket messages

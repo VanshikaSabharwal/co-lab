@@ -2,12 +2,11 @@
   "name": "co-lab",
   "private": true,
   "scripts": {
-    "build": "npm run db:web && turbo build",
+    "build": "npm run turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "start-user-app": "cd ./apps/web && npm run dev",
-    "db:web": "cd apps/web && npx prisma generate && cd ../.."
+    "start-user-app": "cd ./apps/web && npm run dev"
   },
   "devDependencies": {
     "prettier": "^3.2.5",
