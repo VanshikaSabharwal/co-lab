@@ -69,6 +69,8 @@ model Group {
   id           String          @id @default(cuid())
   groupName    String
   githubRepo   String
+  ownerName    String
+  githubAccessToken String
   ownerId      String
   createdAt    DateTime        @default(now())
   owner        User?           @relation("OwnerGroups", fields: [ownerId], references: [id])

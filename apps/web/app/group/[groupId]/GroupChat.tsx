@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { FaUsers, FaPaperPlane } from "react-icons/fa";
 import toast from "react-hot-toast";
+import Link from "next/link";
 
 interface GroupChatProps {
   group: string;
@@ -34,6 +35,8 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const [loadingGroupDetails, setLoadingGroupDetails] = useState(true);
   const [loadingPercentage, setLoadingPercentage] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const githubRepo = groupDetails?.githubRepo;
+  const groupName = groupDetails?.groupName;
 
   const senderId = session?.user?.id;
   const senderName = session?.user?.name;
@@ -221,6 +224,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
               {groupDetails?.groupName}
             </h1>
             <h2 className="text-sm text-center mt-1">Group ID: {group}</h2>
+            <Link href={`/code-editor/${group}/${groupName}`}>Code Editor</Link>
           </div>
           <div
             className="flex-1 overflow-y-auto p-4"
