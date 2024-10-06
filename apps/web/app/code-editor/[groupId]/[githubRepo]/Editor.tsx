@@ -10,6 +10,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import toast from "react-hot-toast";
 import React from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 interface CodeProps {
   github: string;
@@ -28,11 +29,15 @@ interface File {
 export default function Editor({ github, group }: CodeProps) {
   const [fileName, setFileName] = useState("");
   const [fileContent, setFileContent] = useState("");
-  const [originalContent, setOriginalContent] = useState(""); // Store the original content
+  const [originalContent, setOriginalContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
-  const [isEdited, setIsEdited] = useState(false); // Track if any file is edited
+  const [isEdited, setIsEdited] = useState(false);
+  const { data: session } = useSession();
+  const userId = session?.user.id;
+  const [filePath, setFilePath] = useState<string>("");
+
   const router = useRouter();
 
   useEffect(() => {
@@ -62,13 +67,14 @@ export default function Editor({ github, group }: CodeProps) {
   const loadFileContent = async (name: string) => {
     const file = files.find((f) => f.name === name);
     if (file) {
+      setFilePath(file.path);
       try {
         const res = await fetch(file.url);
         if (!res.ok) throw new Error("Failed to fetch file content");
         const data = await res.json();
         const content = atob(data.content);
         setFileContent(content);
-        setOriginalContent(content); // Set the original content when the file is loaded
+        setOriginalContent(content);
         if (!openFiles.includes(name)) {
           setOpenFiles((prev) => [...prev, name]);
         }
@@ -82,16 +88,16 @@ export default function Editor({ github, group }: CodeProps) {
   const handleFileChange = (newContent: string) => {
     setFileContent(newContent);
     if (newContent !== originalContent) {
-      setIsEdited(true); // Mark as edited if content differs
+      setIsEdited(true);
     } else {
-      setIsEdited(false); // Not edited if content matches original
+      setIsEdited(false);
     }
   };
 
   const handleFileClick = async (name: string) => {
     setFileName(name);
     await loadFileContent(name);
-    setIsEdited(false); // Reset editing status when switching files
+    setIsEdited(false);
   };
 
   const getFileLanguage = (fileName: string) => {
@@ -106,13 +112,14 @@ export default function Editor({ github, group }: CodeProps) {
   const handleSave = async () => {
     if (isEdited) {
       try {
-        // Replace with your actual API endpoint to save the edited file
-        const res = await fetch(`/api/save-file`, {
+        const res = await fetch(`/api/save-coding-files`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            fileName,
-            content: btoa(fileContent), // Convert content to base64 before saving
+            name: fileName,
+            path: filePath,
+            userId,
+            content: btoa(fileContent),
             group,
           }),
         });
@@ -122,7 +129,7 @@ export default function Editor({ github, group }: CodeProps) {
         }
 
         toast.success("File saved successfully!");
-        setIsEdited(false); // Reset editing status after saving
+        setIsEdited(false);
         router.push(`/confirm-changes/${group}`);
       } catch (error) {
         console.error("Error saving file:", error);

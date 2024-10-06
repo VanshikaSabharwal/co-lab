@@ -114,11 +114,20 @@ model GroupMessage {
 model File {
   id        Int      @id @default(autoincrement())
   name      String
-  path      String
-  content   String   // The actual file content
+  userId    String   @unique
+  path      String   
+  content   String   
   updatedAt DateTime @updatedAt
   group     String
+  status    FileStatus @default(PENDING) 
 }
+
+enum FileStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 
 enum GroupRole {
   ADMIN

@@ -9,7 +9,7 @@ import { css } from "@codemirror/lang-css";
 import CodeMirror from "@uiw/react-codemirror";
 import toast from "react-hot-toast";
 import React from "react";
-import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 interface GroupProps {
   group: string;
@@ -24,18 +24,20 @@ interface File {
   content?: string;
 }
 
-const Confirm: React.FC<GroupProps> = ({ group }) => {
+export default function Confirm({ group }: GroupProps) {
   const [fileName, setFileName] = useState("");
   const [fileContent, setFileContent] = useState("");
+  const [modifiedContent, setModifiedContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
-  const [modifiedFiles, setModifiedFiles] = useState<File[]>([]); // For files saved in the DB
+  const [modifiedFiles, setModifiedFiles] = useState<File[]>([]);
   const [selectedSection, setSelectedSection] = useState<"github" | "modified">(
     "github"
   );
+  const { data: session } = useSession();
+  const userId = session?.user.id;
 
-  // Fetch GitHub files
   useEffect(() => {
     if (group) {
       const fetchFileContent = async () => {
@@ -60,11 +62,12 @@ const Confirm: React.FC<GroupProps> = ({ group }) => {
     }
   }, [group]);
 
-  // Fetch modified files from DB
   useEffect(() => {
     const fetchModifiedFiles = async () => {
       try {
-        const res = await fetch(`/api/modified-files?group=${group}`);
+        const res = await fetch(
+          `/api/save-coding-files?group=${group}&userId=${userId}`
+        );
         if (!res.ok) throw new Error("Failed to fetch modified files");
 
         const data = await res.json();
@@ -75,7 +78,7 @@ const Confirm: React.FC<GroupProps> = ({ group }) => {
       }
     };
     fetchModifiedFiles();
-  }, [group]);
+  }, [group, userId]);
 
   const loadFileContent = async (name: string) => {
     const file = files.find((f) => f.name === name);
@@ -84,7 +87,10 @@ const Confirm: React.FC<GroupProps> = ({ group }) => {
         const res = await fetch(file.url);
         if (!res.ok) throw new Error("Failed to fetch file content");
         const data = await res.json();
-        setFileContent(atob(data.content));
+
+        const content = atob(data.content);
+        setFileContent(content);
+
         if (!openFiles.includes(name)) {
           setOpenFiles((prev) => [...prev, name]);
         }
@@ -95,13 +101,42 @@ const Confirm: React.FC<GroupProps> = ({ group }) => {
     }
   };
 
-  const handleFileChange = (newContent: string) => {
-    setFileContent(newContent);
+  const loadModifiedContent = async (name: string) => {
+    const file = modifiedFiles.find((f) => f.name === name);
+    if (file) {
+      try {
+        if (file.content) {
+          // If content is already available, decode it
+          const decodedContent = atob(file.content);
+          setModifiedContent(decodedContent);
+        } else if (file.url) {
+          // If content is not available but URL is, fetch the content
+          const res = await fetch(file.url);
+          if (!res.ok) throw new Error("Failed to fetch modified file content");
+          const data = await res.json();
+          const content = atob(data.content);
+          setModifiedContent(content);
+        } else {
+          throw new Error("No content or URL available for modified file");
+        }
+
+        if (!openFiles.includes(name)) {
+          setOpenFiles((prev) => [...prev, name]);
+        }
+      } catch (error) {
+        console.error("Error loading modified file content:", error);
+        toast.error("Failed to load the modified file content.");
+        setModifiedContent("");
+      }
+    } else {
+      setModifiedContent("");
+    }
   };
 
   const handleFileClick = async (name: string) => {
     setFileName(name);
     await loadFileContent(name);
+    await loadModifiedContent(name);
   };
 
   const getFileLanguage = (fileName: string) => {
@@ -114,72 +149,90 @@ const Confirm: React.FC<GroupProps> = ({ group }) => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-900">
-      {/* Left Column - GitHub Files */}
-      <div className="w-1/2 bg-gray-800 p-4">
-        <h2 className="font-bold mb-4 text-white">GitHub Files</h2>
-        <ul className="flex flex-wrap md:flex-nowrap overflow-x-auto">
-          {files.map((file) => (
-            <li key={file.name} className="mb-2 mr-2">
-              <button
-                onClick={() => {
-                  setSelectedSection("github");
-                  handleFileClick(file.name);
-                }}
-                className={`block w-full text-left p-2 rounded transition-all duration-300 ${
-                  fileName === file.name ? "bg-gray-700" : "hover:bg-gray-600"
-                }`}
-              >
-                {file.name}
-              </button>
-            </li>
-          ))}
-        </ul>
+    <div className="flex flex-col h-screen bg-gray-900">
+      <div className="flex-none p-4 bg-gray-800">
+        <h2 className="font-bold mb-4 text-white">Files</h2>
+        <div className="flex space-x-4">
+          <div className="w-1/2">
+            <h3 className="font-bold text-white mb-2">GitHub Files</h3>
+            <ul className="flex flex-wrap overflow-x-auto">
+              {files.map((file) => (
+                <li key={file.name} className="mb-2 mr-2">
+                  <button
+                    onClick={() => {
+                      setSelectedSection("github");
+                      handleFileClick(file.name);
+                    }}
+                    className={`block w-full text-left p-2 rounded transition-all duration-300 ${
+                      fileName === file.name && selectedSection === "github"
+                        ? "bg-gray-700"
+                        : "hover:bg-gray-600"
+                    }`}
+                  >
+                    {file.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="w-1/2">
+            <h3 className="font-bold text-white mb-2">Modified Files</h3>
+            <ul className="flex flex-wrap overflow-x-auto">
+              {modifiedFiles.map((file) => (
+                <li key={file.name} className="mb-2 mr-2">
+                  <button
+                    onClick={() => {
+                      setSelectedSection("modified");
+                      handleFileClick(file.name);
+                    }}
+                    className={`block w-full text-left p-2 rounded transition-all duration-300 ${
+                      fileName === file.name && selectedSection === "modified"
+                        ? "bg-gray-700"
+                        : "hover:bg-gray-600"
+                    }`}
+                  >
+                    {file.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </div>
 
-      {/* Right Column - Modified Files */}
-      <div className="w-1/2 bg-gray-900 p-4">
-        <h2 className="font-bold mb-4 text-white">Modified Files</h2>
-        <ul className="flex flex-wrap md:flex-nowrap overflow-x-auto">
-          {modifiedFiles.map((file) => (
-            <li key={file.name} className="mb-2 mr-2">
-              <button
-                onClick={() => {
-                  setSelectedSection("modified");
-                  setFileName(file.name);
-                  setFileContent(file.content || "");
-                }}
-                className={`block w-full text-left p-2 rounded transition-all duration-300 ${
-                  fileName === file.name ? "bg-gray-700" : "hover:bg-gray-600"
-                }`}
-              >
-                {file.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Code Editor Section */}
-      <div className="w-full flex-grow p-4">
+      <div className="flex-grow p-4 overflow-hidden">
         {loading ? (
           <div className="flex justify-center items-center h-full">
             <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-pink-500"></div>
             <p className="ml-4 text-pink-500">Loading...</p>
           </div>
         ) : (
-          <CodeMirror
-            value={fileContent}
-            height="100%"
-            extensions={[getFileLanguage(fileName)]}
-            onChange={handleFileChange}
-            theme="dark"
-            className="rounded-lg h-full shadow-md overflow-auto"
-          />
+          <div className="flex h-full space-x-4">
+            <div className="w-1/2 h-full">
+              <h3 className="font-bold text-white mb-2">Original Code</h3>
+              <CodeMirror
+                value={fileContent}
+                height="calc(100% - 2rem)"
+                extensions={[getFileLanguage(fileName)]}
+                onChange={setFileContent}
+                theme="dark"
+                className="rounded-lg shadow-md overflow-auto"
+              />
+            </div>
+            <div className="w-1/2 h-full">
+              <h3 className="font-bold text-white mb-2">Modified Code</h3>
+              <CodeMirror
+                value={modifiedContent}
+                height="calc(100% - 2rem)"
+                extensions={[getFileLanguage(fileName)]}
+                onChange={setModifiedContent}
+                theme="dark"
+                className="rounded-lg shadow-md overflow-auto"
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>
   );
-};
-
-export default Confirm;
+}
