@@ -73,9 +73,9 @@ const CreateGroup = () => {
       {showNote && (
         <div className="bg-yellow-100 p-4 border border-yellow-300 rounded-md mb-4">
           <p className="text-sm">
-            Please ensure all details are valid. The owner name must be correct,
-            and all other details must be accurate for everything to work
-            properly.
+            Please ensure all details are valid. Make sure the Group Name
+            matches the github repo name. The owner name must be correct, and
+            all other details must be accurate for everything to work properly.
           </p>
           <button
             onClick={() => setShowNote(false)} // Hide the note on button click

@@ -224,7 +224,11 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
               {groupDetails?.groupName}
             </h1>
             <h2 className="text-sm text-center mt-1">Group ID: {group}</h2>
-            <Link href={`/code-editor/${group}/${groupName}`}>Code Editor</Link>
+            <Link href={`/code-editor/${group}/${groupName}`}>
+              <button className="mt-2 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition duration-300">
+                Code Editor
+              </button>
+            </Link>
           </div>
           <div
             className="flex-1 overflow-y-auto p-4"
