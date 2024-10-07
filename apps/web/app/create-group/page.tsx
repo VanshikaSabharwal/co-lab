@@ -18,7 +18,7 @@ const CreateGroup = () => {
   const ownerId = session?.user.id;
 
   const [groups, setGroups] = useState<Group[]>([]);
-  const [showNote, setShowNote] = useState(true); // State to control note visibility
+  const [showNote, setShowNote] = useState(true);
 
   // Show a toast note on page load
   useEffect(() => {
