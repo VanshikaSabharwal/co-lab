@@ -1,6 +1,6 @@
 import prisma from "../lib/prisma";
 import { getServerSession } from "next-auth";
-import { authOptions } from "../lib/auth"; // Adjust path if needed
+import { authOptions } from "../lib/auth";
 
 export default async function MyGroups() {
   // Get the session to retrieve the user
