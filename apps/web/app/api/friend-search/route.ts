@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     } else {
       return NextResponse.json(
         { message: "Friend does not exist" },
-        { status: 404 } // Changed to 404 Not Found for better semantics
+        { status: 404 }
       );
     }
   } catch (error) {

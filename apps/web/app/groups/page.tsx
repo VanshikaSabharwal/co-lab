@@ -1,11 +1,33 @@
 import prisma from "../lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "../lib/auth"; // Adjust path if needed
 
 export default async function MyGroups() {
-  const groups = await prisma.group.findMany();
+  // Get the session to retrieve the user
+  const session = await getServerSession(authOptions);
+
+  if (!session) {
+    return (
+      <div className="flex flex-col items-center p-6">
+        <h1 className="text-3xl font-bold mb-6">Groups</h1>
+        <p>Please log in to view your groups.</p>
+      </div>
+    );
+  }
+
+  // Get the current user's ID
+  const userId = session.user.id;
+
+  // Fetch groups where the ownerId matches the current userId
+  const groups = await prisma.group.findMany({
+    where: {
+      ownerId: userId, // Filter based on the userId
+    },
+  });
 
   return (
     <div className="flex flex-col items-center p-6">
-      <h1 className="text-3xl font-bold mb-6"> Groups</h1>
+      <h1 className="text-3xl font-bold mb-6">Groups</h1>
       {groups.length > 0 ? (
         <ul className="space-y-4 w-full max-w-md">
           {groups.map((group) => (
@@ -21,7 +43,6 @@ export default async function MyGroups() {
               </a>{" "}
               <br />
               <a href={`group/${group.id}`} className="text-blue-600">
-                {" "}
                 <strong>Group ID:</strong> {group.id}
               </a>
             </li>

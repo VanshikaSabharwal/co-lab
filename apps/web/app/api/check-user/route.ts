@@ -27,7 +27,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ exists: false });
     }
   } catch (err) {
-    console.error("Error while checking user with phone:", phone, err); // More context in error log
+    console.error("Error while checking user with phone:", phone, err);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }
