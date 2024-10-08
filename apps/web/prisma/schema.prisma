@@ -122,6 +122,17 @@ model File {
   status    FileStatus @default(PENDING) 
 }
 
+
+model Notifications{
+  id        String   @id @default(cuid())
+  userId    String
+  groupId   String
+  userName  String
+  ownerId   String
+  ownerName String
+  groupName String
+  createdAt DateTime @default(now())
+}
 enum FileStatus {
   PENDING
   APPROVED

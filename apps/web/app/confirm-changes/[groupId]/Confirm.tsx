@@ -9,6 +9,7 @@ import { css } from "@codemirror/lang-css";
 import CodeMirror from "@uiw/react-codemirror";
 import toast from "react-hot-toast";
 import React from "react";
+import { v4 as uuidv4 } from "uuid";
 import { useSession } from "next-auth/react";
 
 interface GroupProps {
@@ -37,6 +38,28 @@ export default function Confirm({ group }: GroupProps) {
   );
   const { data: session } = useSession();
   const userId = session?.user.id;
+  const [changeRequestLoading, setChangeReqestLoading] = useState(false);
+  const userName = session?.user.name;
+  const [groupName, setGroupName] = useState("");
+
+  useEffect(() => {
+    if (group) {
+      const fetchGroupName = async () => {
+        try {
+          const res = await fetch(`/api/create-group-data?groupId=${group}`);
+          if (!res.ok) {
+            toast.error("Failed to fetch group data");
+          }
+          const data = await res.json();
+          setGroupName(data.groupName);
+        } catch (err) {
+          console.error(err);
+          toast.error("Failed to load the group name.");
+        }
+      };
+      fetchGroupName();
+    }
+  }, [group]);
 
   useEffect(() => {
     if (group) {
@@ -148,10 +171,30 @@ export default function Confirm({ group }: GroupProps) {
     return javascript();
   };
 
+  const raiseChangeRequest = async () => {
+    const crId = uuidv4();
+    setChangeReqestLoading(true);
+    try {
+      const response = await fetch(`/api/change-request?group=${group}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId, userName, groupName }),
+      });
+      const data = await response.json();
+    } catch (error) {
+      console.log("Error while raising CR: ", error);
+      toast.error(`${error}`);
+    }
+  };
   return (
     <div className="flex flex-col h-screen bg-gray-900">
       <div className="flex-none p-4 bg-gray-800">
         <h2 className="font-bold mb-4 text-white">Files</h2>
+        <button onClick={raiseChangeRequest} disabled={loading}>
+          {loading ? "Raising..." : "Raise Change Request"}
+        </button>
         <div className="flex space-x-4">
           <div className="w-1/2">
             <h3 className="font-bold text-white mb-2">GitHub Files</h3>

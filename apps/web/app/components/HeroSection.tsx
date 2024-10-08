@@ -51,7 +51,7 @@ const HeroSection = async () => {
         href="/groups"
         className="mt-4 px-6 py-3 bg-indigo-600 text-white rounded-lg text-lg hover:bg-indigo-500 transition-all duration-300 shadow-lg"
       >
-        All Groups
+        My Groups
       </Link>
     </div>
   );

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import FriendSearch from "../components/FriendSearch";
+import Notifications from "./Notifications";
 
 // Example contact list with phone numbers
 const contacts = [
@@ -60,7 +61,7 @@ const ChatApp = () => {
           <FriendSearch />
         </div>
 
-        {groups.length > 0 && (
+        {/* {groups.length > 0 && (
           <div className="mt-8 w-full max-w-md">
             <h2 className="text-xl text-black-500 font-bold mb-4">
               My Groups:
@@ -88,7 +89,9 @@ const ChatApp = () => {
               ))}
             </ul>
           </div>
-        )}
+        )} */}
+        {/* notifications section  */}
+        <Notifications />
 
         {/* Bottom section: Email and Phone */}
         <div className="border-t border-blue-200 text-black-500 mt-6 pt-4 text-center">
