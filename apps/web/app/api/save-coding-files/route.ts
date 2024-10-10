@@ -64,16 +64,44 @@ export async function GET(req: Request) {
   const group = searchParams.get("group");
 
   if (!userId || !group) {
-    return NextResponse.json({ error: "userId is required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Both userId and group are required" },
+      { status: 400 }
+    );
   }
+
   try {
+    console.log(`Fetching files for userId: ${userId}, group: ${group}`);
+
     const updatedFiles = await prisma.file.findMany({
       where: {
-        userId,
-        status: "PENDING",
+        group: group,
+        OR: [{ userId: userId }, { ownerId: userId }],
       },
     });
-    return NextResponse.json(updatedFiles, { status: 200 });
+
+    console.log(`Found ${updatedFiles.length} files`);
+
+    if (updatedFiles.length === 0) {
+      console.log("No files found. Checking if user and group exist.");
+
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const groupExists = await prisma.group.findUnique({
+        where: { id: group },
+      });
+
+      if (!user) {
+        console.log(`User with id ${userId} not found`);
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+
+      if (!groupExists) {
+        console.log(`Group with id ${group} not found`);
+        return NextResponse.json({ error: "Group not found" }, { status: 404 });
+      }
+    }
+
+    return NextResponse.json({ files: updatedFiles }, { status: 200 });
   } catch (error) {
     console.error("Error fetching updated files: ", error);
     return NextResponse.json(

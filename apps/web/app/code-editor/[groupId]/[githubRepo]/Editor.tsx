@@ -86,12 +86,46 @@ export default function Editor({ github, group }: CodeProps) {
   };
 
   const handleFileChange = (newContent: string) => {
-    setFileContent(newContent);
-    if (newContent !== originalContent) {
+    const originalLines = originalContent.split("\n");
+    const newLines = newContent.split("\n");
+
+    const changes: any = [];
+    console.log(changes);
+    console.log(newLines);
+
+    // Track added and modified lines in the new content
+    newLines.forEach((line, index) => {
+      if (index >= originalLines.length) {
+        // New line added
+        changes.push({ type: "added", lineNumber: index + 1, content: line });
+      } else if (line !== originalLines[index]) {
+        // Line modified
+        changes.push({
+          type: "modified",
+          lineNumber: index + 1,
+          content: line,
+        });
+      }
+    });
+
+    // Track removed lines from the original content
+    originalLines.forEach((line, index) => {
+      if (index >= newLines.length) {
+        // Line removed
+        changes.push({ type: "removed", lineNumber: index + 1, content: line });
+      }
+    });
+
+    // If any changes, mark as edited and store the changes
+    if (changes.length > 0) {
       setIsEdited(true);
+      console.log("Line changes detected:", changes);
     } else {
       setIsEdited(false);
     }
+
+    // Update the file content
+    setFileContent(newContent);
   };
 
   const handleFileClick = async (name: string) => {
@@ -112,7 +146,7 @@ export default function Editor({ github, group }: CodeProps) {
   const handleSave = async () => {
     if (isEdited) {
       try {
-        const res = await fetch(`/api/save-coding-files`, {
+        const res = await fetch(`/api/modified-files`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -140,7 +174,6 @@ export default function Editor({ github, group }: CodeProps) {
 
   return (
     <div className="flex flex-col h-screen bg-gray-900">
-      {/* File Navigation */}
       <div className="bg-gray-800 text-white p-4 md:order-1">
         <h2 className="font-bold mb-4">Files</h2>
         <ul className="flex flex-wrap md:flex-nowrap overflow-x-auto">
@@ -171,47 +204,43 @@ export default function Editor({ github, group }: CodeProps) {
             <button
               key={file}
               onClick={() => handleFileClick(file)}
-              className={`p-2 px-4 whitespace-nowrap transition-all duration-300 ${
+              className={`mr-2 p-2 text-sm md:text-base ${
                 fileName === file ? "bg-gray-700" : "hover:bg-gray-600"
-              }`}
+              } rounded`}
             >
               {file}
             </button>
           ))}
         </div>
-
-        {/* Save Button */}
-        <div className="p-4 bg-gray-800 flex justify-end">
-          <button
-            onClick={handleSave}
-            disabled={!isEdited} // Disable the save button if no changes
-            className={`${
-              isEdited
-                ? "bg-pink-500 hover:bg-pink-600"
-                : "bg-gray-600 cursor-not-allowed"
-            } text-white py-2 px-4 rounded-lg transition-all duration-300`}
-          >
-            Save
-          </button>
-        </div>
-        {/* CodeMirror Editor */}
-        <div className="flex-grow overflow-auto p-4 relative">
+        {/* Code Editor */}
+        <div className="flex-grow overflow-auto">
           {loading ? (
-            <div className="flex justify-center items-center h-full">
-              <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-pink-500"></div>
-              <p className="ml-4 text-pink-500">Loading...</p>
-            </div>
+            <p className="text-white">Loading...</p>
           ) : (
             <CodeMirror
               value={fileContent}
               height="100%"
+              theme="dark"
               extensions={[getFileLanguage(fileName)]}
               onChange={handleFileChange}
-              theme="dark"
-              className="rounded-lg h-full shadow-md overflow-auto"
             />
           )}
         </div>
+      </div>
+
+      {/* Save Button */}
+      <div className="p-4 bg-gray-800 text-white md:order-3">
+        <button
+          onClick={handleSave}
+          disabled={!isEdited}
+          className={`p-2 rounded ${
+            isEdited
+              ? "bg-blue-500 hover:bg-blue-400"
+              : "bg-gray-500 cursor-not-allowed"
+          }`}
+        >
+          {isEdited ? "Save Changes" : "No Changes"}
+        </button>
       </div>
     </div>
   );

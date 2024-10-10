@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import Link from "next/link"; // Import Link from next/link
+import Link from "next/link";
 
 interface NotificationsType {
   id: string;
@@ -65,7 +65,7 @@ const NotificationsPage = () => {
               <strong>{notification.groupName}</strong>
             </p>
             <Link
-              href="/confirm-changes"
+              href={`/confirm-changes/${notification.groupId}`}
               className="mt-2 inline-block text-blue-500 hover:underline"
             >
               View Changes

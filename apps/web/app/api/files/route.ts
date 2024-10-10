@@ -66,7 +66,6 @@ export async function GET(req: Request) {
 
     const { groupName, ownerName, githubAccessToken } = groupDetails;
 
-    // Ensure both the GitHub repository URL and access token are present
     if (!groupName || !ownerName || !githubAccessToken) {
       return NextResponse.json(
         {
@@ -77,22 +76,17 @@ export async function GET(req: Request) {
       );
     }
 
-    // Decrypt the GitHub access token
     const decryptedAccessToken = decrypt(githubAccessToken);
-    console.log(decryptedAccessToken);
 
-    // Prepare the GitHub API URL
     const githubApiUrl = `https://api.github.com/repos/${ownerName}/${groupName}/contents`;
 
-    // Fetch repository contents using the decrypted GitHub access token
     const response = await fetch(githubApiUrl, {
       headers: {
-        Authorization: `token ${decryptedAccessToken}`, // Use decrypted token
+        Authorization: `token ${decryptedAccessToken}`,
         Accept: "application/vnd.github.v3+json",
       },
     });
 
-    // Check for response errors
     if (!response.ok) {
       const error = await response.json();
       console.error("GitHub API Error: ", error);
@@ -103,7 +97,6 @@ export async function GET(req: Request) {
     }
 
     const repoContents = await response.json();
-    console.log(repoContents);
 
     return NextResponse.json(repoContents, { status: 200 });
   } catch (err) {
@@ -113,7 +106,6 @@ export async function GET(req: Request) {
       { status: 500 }
     );
   } finally {
-    // Close the Prisma connection
     await prisma.$disconnect();
   }
 }

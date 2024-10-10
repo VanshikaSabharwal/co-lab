@@ -8,7 +8,6 @@ import { java } from "@codemirror/lang-java";
 import { css } from "@codemirror/lang-css";
 import CodeMirror from "@uiw/react-codemirror";
 import toast from "react-hot-toast";
-import React from "react";
 import { v4 as uuidv4 } from "uuid";
 import { useSession } from "next-auth/react";
 
@@ -23,143 +22,129 @@ interface File {
   size: number;
   url: string;
   content?: string;
+  userId?: string;
 }
 
-export default function Confirm({ group }: GroupProps) {
+const Confirm = ({ group }: GroupProps) => {
   const [fileName, setFileName] = useState("");
-  const [fileContent, setFileContent] = useState("");
-  const [modifiedContent, setModifiedContent] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [modifiedFiles, setModifiedFiles] = useState<File[]>([]);
+  const [loadingState, setLoadingState] = useState({
+    loading: true,
+    changeRequestLoading: false,
+  });
+  const [fileContent, setFileContent] = useState({
+    original: "",
+    modified: "",
+  });
+  const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [selectedSection, setSelectedSection] = useState<"github" | "modified">(
     "github"
   );
+
   const { data: session } = useSession();
-  const userId = session?.user.id;
-  const [changeRequestLoading, setChangeReqestLoading] = useState(false);
-  const userName = session?.user.name;
+  const userId = session?.user?.id;
+  const userName = session?.user?.name;
+  const [groupOwnerId, setGroupOwnerId] = useState("");
+  const [groupOwnerName, setGroupOwnerName] = useState("");
   const [groupName, setGroupName] = useState("");
 
   useEffect(() => {
     if (group) {
-      const fetchGroupName = async () => {
+      const fetchFiles = async () => {
         try {
-          const res = await fetch(`/api/create-group-data?groupId=${group}`);
-          if (!res.ok) {
-            toast.error("Failed to fetch group data");
-          }
-          const data = await res.json();
-          setGroupName(data.groupName);
-        } catch (err) {
-          console.error(err);
-          toast.error("Failed to load the group name.");
-        }
-      };
-      fetchGroupName();
-    }
-  }, [group]);
+          const [githubRes, modifiedRes, groupRes] = await Promise.all([
+            fetch(`/api/files?group=${group}`),
+            fetch(`/api/save-coding-files?group=${group}&userId=${userId}`),
+            fetch(`/api/create-group-data?group=${group}`),
+          ]);
 
-  useEffect(() => {
-    if (group) {
-      const fetchFileContent = async () => {
-        try {
-          const res = await fetch(`/api/files?group=${group}`);
-          if (!res.ok) throw new Error("Failed to fetch file content");
+          if (!githubRes.ok || !modifiedRes.ok || !groupRes.ok)
+            throw new Error("Failed to fetch file data");
 
-          const data = await res.json();
-          setFiles(data);
-          if (data.length > 0) {
-            setFileName(data[0].name);
-            await loadFileContent(data[0].name);
+          const githubData = await githubRes.json();
+          const modifiedData = await modifiedRes.json();
+          const groupData = await groupRes.json();
+
+          setFiles(Array.isArray(githubData) ? githubData : []);
+          setModifiedFiles(
+            Array.isArray(modifiedData.files) ? modifiedData.files : []
+          );
+
+          setGroupOwnerId(groupData.ownerId);
+          setGroupOwnerName(groupData.ownerName);
+          setGroupName(groupData.groupName);
+
+          if (githubData.length > 0) {
+            await loadFileContent(githubData[0].name);
           }
         } catch (error) {
-          console.error("Error fetching file content:", error);
-          toast.error("Failed to load the files.");
+          console.error("Error fetching files:", error);
+          toast.error("Failed to load files.");
         } finally {
-          setLoading(false);
+          setLoadingState((prev) => ({ ...prev, loading: false }));
         }
       };
-      fetchFileContent();
+
+      fetchFiles();
     }
-  }, [group]);
-
-  useEffect(() => {
-    const fetchModifiedFiles = async () => {
-      try {
-        const res = await fetch(
-          `/api/save-coding-files?group=${group}&userId=${userId}`
-        );
-        if (!res.ok) throw new Error("Failed to fetch modified files");
-
-        const data = await res.json();
-        setModifiedFiles(data);
-      } catch (error) {
-        console.error("Error fetching modified files:", error);
-        toast.error("Failed to load modified files.");
-      }
-    };
-    fetchModifiedFiles();
   }, [group, userId]);
 
   const loadFileContent = async (name: string) => {
     const file = files.find((f) => f.name === name);
-    if (file) {
-      try {
+    const modifiedFile = modifiedFiles.find((f) => f.name === name);
+
+    try {
+      if (file) {
         const res = await fetch(file.url);
         if (!res.ok) throw new Error("Failed to fetch file content");
         const data = await res.json();
-
         const content = atob(data.content);
-        setFileContent(content);
-
-        if (!openFiles.includes(name)) {
-          setOpenFiles((prev) => [...prev, name]);
-        }
-      } catch (error) {
-        console.error("Error fetching file content:", error);
-        toast.error("Failed to load the file content.");
+        setFileContent((prev) => ({ ...prev, original: content }));
       }
+
+      if (modifiedFile) {
+        const modifiedContent = modifiedFile.content
+          ? atob(modifiedFile.content)
+          : "";
+        setFileContent((prev) => ({ ...prev, modified: modifiedContent }));
+      }
+
+      if (!openFiles.includes(name)) {
+        setOpenFiles((prev) => [...prev, name]);
+      }
+    } catch (error) {
+      console.error("Error loading content:", error);
+      toast.error("Failed to load file content.");
     }
   };
 
-  const loadModifiedContent = async (name: string) => {
-    const file = modifiedFiles.find((f) => f.name === name);
-    if (file) {
-      try {
-        if (file.content) {
-          // If content is already available, decode it
-          const decodedContent = atob(file.content);
-          setModifiedContent(decodedContent);
-        } else if (file.url) {
-          // If content is not available but URL is, fetch the content
-          const res = await fetch(file.url);
-          if (!res.ok) throw new Error("Failed to fetch modified file content");
-          const data = await res.json();
-          const content = atob(data.content);
-          setModifiedContent(content);
-        } else {
-          throw new Error("No content or URL available for modified file");
-        }
-
-        if (!openFiles.includes(name)) {
-          setOpenFiles((prev) => [...prev, name]);
-        }
-      } catch (error) {
-        console.error("Error loading modified file content:", error);
-        toast.error("Failed to load the modified file content.");
-        setModifiedContent("");
-      }
-    } else {
-      setModifiedContent("");
-    }
-  };
-
-  const handleFileClick = async (name: string) => {
+  const handleFileClick = (name: string) => {
     setFileName(name);
-    await loadFileContent(name);
-    await loadModifiedContent(name);
+    loadFileContent(name);
+  };
+
+  const raiseChangeRequest = async () => {
+    const crId = uuidv4();
+    setLoadingState((prev) => ({ ...prev, changeRequestLoading: true }));
+    try {
+      const response = await fetch(`/api/change-request?group=${group}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId, userName, groupName: group }),
+      });
+
+      if (!response.ok) throw new Error("Failed to raise change request");
+
+      toast.success("Change request raised successfully!");
+    } catch (error) {
+      console.error("Error while raising CR:", error);
+      toast.error("Failed to raise change request.");
+    } finally {
+      setLoadingState((prev) => ({ ...prev, changeRequestLoading: false }));
+    }
   };
 
   const getFileLanguage = (fileName: string) => {
@@ -171,30 +156,121 @@ export default function Confirm({ group }: GroupProps) {
     return javascript();
   };
 
-  const raiseChangeRequest = async () => {
-    const crId = uuidv4();
-    setChangeReqestLoading(true);
+  const handleApproveCr = async () => {
+    setLoadingState((prev) => ({ ...prev, changeRequestLoading: true }));
+
     try {
-      const response = await fetch(`/api/change-request?group=${group}`, {
+      const modifiedFilesData = modifiedFiles.map((file) => ({
+        path: file.path,
+        content: file.content,
+        sha: file.sha,
+      }));
+
+      const response = await fetch(`/api/commit-changes`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ userId, userName, groupName }),
+        body: JSON.stringify({
+          userId,
+          repoOwner: groupOwnerId,
+          repoName: groupName,
+          modifiedFiles: modifiedFilesData,
+          groupId: group,
+        }),
       });
-      const data = await response.json();
+
+      if (!response.ok) throw new Error("Failed to commit changes");
+
+      toast.success("Changes committed successfully!");
     } catch (error) {
-      console.log("Error while raising CR: ", error);
-      toast.error(`${error}`);
+      console.error("Error while committing changes:", error);
+      toast.error("Failed to commit changes.");
+    } finally {
+      setLoadingState((prev) => ({ ...prev, changeRequestLoading: false }));
     }
   };
+
+  const handleApprove = async () => {
+    setLoadingState((prev) => ({ ...prev, changeRequestLoading: true }));
+
+    try {
+      const modifiedFilesData = modifiedFiles.map((file) => ({
+        path: file.path,
+        content: file.content,
+        sha: file.sha,
+      }));
+
+      const response = await fetch(`/api/commit-changes`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          repoOwner: groupOwnerId,
+          repoName: groupName,
+          modifiedFiles: modifiedFilesData,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to commit changes");
+
+      toast.success("Changes committed successfully!");
+    } catch (error) {
+      console.error("Error while committing changes:", error);
+      toast.error("Failed to commit changes.");
+    } finally {
+      setLoadingState((prev) => ({ ...prev, changeRequestLoading: false }));
+    }
+  };
+
+  const handleRejectCr = async () => {
+    alert("Rejected CR");
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-900">
       <div className="flex-none p-4 bg-gray-800">
-        <h2 className="font-bold mb-4 text-white">Files</h2>
-        <button onClick={raiseChangeRequest} disabled={loading}>
-          {loading ? "Raising..." : "Raise Change Request"}
-        </button>
+        <h2 className="font-bold mb-4 text-white">
+          Files for Group: {groupName}
+        </h2>
+
+        {userId === groupOwnerId ? (
+          <div>
+            <p className="text-white mb-4">
+              Hello, {groupOwnerName}! You are the owner of this group.
+            </p>
+            <button
+              className="mr-2 bg-green-500 p-2 rounded"
+              onClick={async () => {
+                await handleApprove();
+              }}
+            >
+              Approve
+            </button>
+
+            <button
+              className="bg-red-500 p-2 rounded"
+              onClick={async () => {
+                await handleRejectCr();
+              }}
+            >
+              Reject
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={raiseChangeRequest}
+            disabled={loadingState.changeRequestLoading}
+            className="bg-blue-500 p-2 rounded"
+          >
+            {loadingState.changeRequestLoading
+              ? "Raising..."
+              : "Raise Change Request"}
+          </button>
+        )}
+
         <div className="flex space-x-4">
           <div className="w-1/2">
             <h3 className="font-bold text-white mb-2">GitHub Files</h3>
@@ -218,6 +294,7 @@ export default function Confirm({ group }: GroupProps) {
               ))}
             </ul>
           </div>
+
           <div className="w-1/2">
             <h3 className="font-bold text-white mb-2">Modified Files</h3>
             <ul className="flex flex-wrap overflow-x-auto">
@@ -244,33 +321,31 @@ export default function Confirm({ group }: GroupProps) {
       </div>
 
       <div className="flex-grow p-4 overflow-hidden">
-        {loading ? (
+        {loadingState.loading ? (
           <div className="flex justify-center items-center h-full">
             <div className="animate-spin rounded-full h-10 w-10 border-t-4 border-pink-500"></div>
             <p className="ml-4 text-pink-500">Loading...</p>
           </div>
         ) : (
-          <div className="flex h-full space-x-4">
-            <div className="w-1/2 h-full">
-              <h3 className="font-bold text-white mb-2">Original Code</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h4 className="font-bold text-white mb-2">Original File</h4>
               <CodeMirror
-                value={fileContent}
-                height="calc(100% - 2rem)"
+                value={fileContent.original}
                 extensions={[getFileLanguage(fileName)]}
-                onChange={setFileContent}
                 theme="dark"
-                className="rounded-lg shadow-md overflow-auto"
+                height="400px"
+                readOnly
               />
             </div>
-            <div className="w-1/2 h-full">
-              <h3 className="font-bold text-white mb-2">Modified Code</h3>
+            <div>
+              <h4 className="font-bold text-white mb-2">Modified File</h4>
               <CodeMirror
-                value={modifiedContent}
-                height="calc(100% - 2rem)"
+                value={fileContent.modified}
                 extensions={[getFileLanguage(fileName)]}
-                onChange={setModifiedContent}
                 theme="dark"
-                className="rounded-lg shadow-md overflow-auto"
+                height="400px"
+                readOnly
               />
             </div>
           </div>
@@ -278,4 +353,6 @@ export default function Confirm({ group }: GroupProps) {
       </div>
     </div>
   );
-}
+};
+
+export default Confirm;

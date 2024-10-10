@@ -18,10 +18,20 @@ export default async function MyGroups() {
   // Get the current user's ID
   const userId = session.user.id;
 
-  // Fetch groups where the ownerId matches the current userId
+  // Fetch groups where the user is either the owner or a member
   const groups = await prisma.group.findMany({
     where: {
-      ownerId: userId, // Filter based on the userId
+      OR: [
+        { ownerId: userId }, // User is the owner
+        { members: { some: { userId } } }, // User is a member of the group
+      ],
+    },
+    include: {
+      members: {
+        include: {
+          user: true, // Include user details from the members
+        },
+      },
     },
   });
 
@@ -45,6 +55,16 @@ export default async function MyGroups() {
               <a href={`group/${group.id}`} className="text-blue-600">
                 <strong>Group ID:</strong> {group.id}
               </a>
+              <br />
+              {group.ownerId === userId ? (
+                <span className="text-green-600 font-bold">
+                  You are the owner
+                </span>
+              ) : (
+                <span className="text-purple-600 font-bold">
+                  You are a member
+                </span>
+              )}
             </li>
           ))}
         </ul>

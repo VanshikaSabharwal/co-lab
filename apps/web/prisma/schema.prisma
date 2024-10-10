@@ -21,6 +21,7 @@ model User {
   ownedGroups         Group[]         @relation("OwnerGroups")
   groupMembers        GroupMember[]   @relation("UserGroups")
   groupMessages       GroupMessage[] @relation("GroupMessages")
+  userModifiedFiles   ModifiedFiles[] @relation("userModifiedFile")
 }
 
 model Friendship {
@@ -76,6 +77,7 @@ model Group {
   owner        User?           @relation("OwnerGroups", fields: [ownerId], references: [id])
   members      GroupMember[]   @relation("GroupToMembers")
   groupMessage GroupMessage[] @relation("GroupMessage")
+  modifiedFiles ModifiedFiles[] @relation("modifiedFiles")
 }
 
 model GroupMember {
@@ -117,9 +119,25 @@ model File {
   userId    String   @unique
   path      String   
   content   String   
+  ownerId   String   @default("")
+  ownerName String   @default("") 
   updatedAt DateTime @updatedAt
   group     String
   status    FileStatus @default(PENDING) 
+}
+
+model ModifiedFiles{
+    id       Int     @id @default(autoincrement())
+  name      String
+  path      String
+  content   String   @db.Text
+  userId    String
+  groupId   String
+  modifiedById String?
+  modifiedBy  User?     @relation("userModifiedFile",fields: [modifiedById], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  group     Group    @relation("modifiedFiles",fields: [groupId], references: [id])
 }
 
 
