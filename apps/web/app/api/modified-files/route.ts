@@ -1,109 +1,85 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
-import { getToken } from "next-auth/jwt";
 
 export async function POST(req: Request) {
-  const { name, path, content, userId, group } = await req.json();
-
-  // Validate required fields
-  if (!name || !path || !content || !userId || !group) {
-    return NextResponse.json(
-      { error: "Missing required fields." },
-      { status: 400 }
-    );
-  }
-
+  const { name, path, userId, content, group } = await req.json();
   try {
-    const existingFile = await prisma.modifiedFiles.findFirst({
-      where: {
-        name,
-        path,
+    const modifiedFile = await prisma.modifiedFiles.upsert({
+      where: { userId },
+      update: {
+        content,
+        updatedAt: new Date(),
         userId,
         groupId: group,
       },
+      create: {
+        name,
+        path,
+        content,
+        userId,
+        modifiedById: userId,
+        groupId: group,
+      },
     });
-
-    if (existingFile) {
-      // Update the existing file
-      await prisma.modifiedFiles.update({
-        where: { id: existingFile.id },
-        data: {
-          content,
-          updatedAt: new Date(),
-        },
-      });
-    } else {
-      // Create a new file
-      await prisma.modifiedFiles.create({
-        data: {
-          name,
-          path,
-          content,
-          userId,
-          groupId: group,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      });
-    }
-    return NextResponse.json(
-      { message: "File saved successfully" },
-      { status: 200 }
-    );
-  } catch (err) {
-    console.error("Error saving file:", err);
-    return NextResponse.json(
-      { error: "Internal Server Error!" },
-      { status: 500 }
-    );
+    return NextResponse.json(modifiedFile, { status: 200 });
+  } catch (error) {
+    console.error("Error saving file: ", error);
+    return NextResponse.json({ Error: "Failed to save file" }, { status: 500 });
   }
 }
 
 export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const userId = searchParams.get("userId");
+  const group = searchParams.get("group");
+
+  if (!userId) {
+    return NextResponse.json({ Error: "UserId required" }, { status: 400 });
+  }
+
+  if (!group) {
+    return NextResponse.json({ Error: "Group required" }, { status: 400 });
+  }
   try {
-    const { searchParams } = new URL(req.url);
-    const groupId = searchParams.get("group");
-    const userId = searchParams.get("userId");
+    const modifiedFileData = await prisma.modifiedFiles.findFirst({
+      where: {
+        OR: [{ userId: userId }, { group: { ownerId: userId } }],
+      },
+      select: {
+        userId: true,
+        group: {
+          select: {
+            ownerId: true,
+          },
+        },
+      },
+    });
 
-    // Validate query parameters
-    if (!groupId || !userId) {
+    if (!modifiedFileData) {
       return NextResponse.json(
-        { error: "Missing group or user ID" },
-        { status: 400 }
+        { Error: "No modified file found" },
+        { status: 404 }
       );
     }
 
-    // Fetch group and members
-    const group = await prisma.group.findUnique({
-      where: { id: groupId },
-      include: { members: true },
-    });
-
-    if (!group) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 });
+    if (
+      userId === modifiedFileData?.userId ||
+      userId === modifiedFileData?.group.ownerId
+    ) {
+      const modifiedFile = await prisma.modifiedFiles.findFirst({
+        where: {
+          groupId: group,
+          OR: [{ userId: userId }, { group: { ownerId: userId } }],
+        },
+      });
+      return NextResponse.json(modifiedFile, { status: 200 });
+    } else {
+      return NextResponse.json({ Error: "Access denied" }, { status: 403 });
     }
-
-    // Check if user is either owner or member of the group
-    const isOwner = group.ownerId === userId;
-    const isMember = group.members.some((member) => member.id === userId);
-
-    if (!isOwner && !isMember) {
-      return NextResponse.json(
-        { error: "Forbidden. You are not allowed to view the modified files." },
-        { status: 403 }
-      );
-    }
-
-    // Fetch modified files for the group
-    const modifiedFiles = await prisma.modifiedFiles.findMany({
-      where: { groupId },
-    });
-
-    return NextResponse.json({ modifiedFiles }, { status: 200 });
-  } catch (err) {
-    console.error("Error fetching files:", err);
+  } catch (error) {
+    console.error("Error fetching file: ", error);
     return NextResponse.json(
-      { error: "Internal Server Error!" },
+      { Error: "Failed to fetch file" },
       { status: 500 }
     );
   }

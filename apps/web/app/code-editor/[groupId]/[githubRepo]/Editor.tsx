@@ -89,9 +89,7 @@ export default function Editor({ github, group }: CodeProps) {
     const originalLines = originalContent.split("\n");
     const newLines = newContent.split("\n");
 
-    const changes: any = [];
-    console.log(changes);
-    console.log(newLines);
+    const changes: { type: string; lineNumber: number; content: string }[] = [];
 
     // Track added and modified lines in the new content
     newLines.forEach((line, index) => {
@@ -116,10 +114,12 @@ export default function Editor({ github, group }: CodeProps) {
       }
     });
 
-    // If any changes, mark as edited and store the changes
+    // Log the detected changes
+    console.log("Detected Changes:", changes);
+
+    // If any changes, mark as edited
     if (changes.length > 0) {
       setIsEdited(true);
-      console.log("Line changes detected:", changes);
     } else {
       setIsEdited(false);
     }
@@ -157,6 +157,8 @@ export default function Editor({ github, group }: CodeProps) {
             group,
           }),
         });
+        const data = res.json()
+        console.log(data)
 
         if (!res.ok) {
           throw new Error("Failed to save the file");

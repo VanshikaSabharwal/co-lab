@@ -10,7 +10,6 @@ const ENCRYPTION_KEY_HEX =
   process.env.ENCRYPTION_KEY ||
   "238d654b1ee39c0663cf2bb6602315cdbc48c322b3a06f50a90e92248468b743";
 const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_HEX, "hex");
-const IV_LENGTH = 16; // AES-256-CBC requires a 16-byte IV
 
 // Helper function to decrypt the GitHub access token
 function decrypt(encryptedText: string): string {
@@ -50,11 +49,10 @@ export async function GET(req: Request) {
       select: {
         groupName: true,
         ownerName: true,
-        githubAccessToken: true, // Encrypted access token
+        ownerId: true,
+        githubAccessToken: true,
       },
     });
-
-    console.log("Group Details: ", groupDetails);
 
     // Check if the group exists
     if (!groupDetails) {

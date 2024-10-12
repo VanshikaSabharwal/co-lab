@@ -50,27 +50,32 @@ const Confirm = ({ group }: GroupProps) => {
   const [groupName, setGroupName] = useState("");
 
   useEffect(() => {
-    if (group) {
+    if (group && userId) {
       const fetchFiles = async () => {
         try {
-          const [githubRes, modifiedRes, groupRes] = await Promise.all([
+          const [githubRes, groupRes] = await Promise.all([
             fetch(`/api/files?group=${group}`),
-            fetch(`/api/save-coding-files?group=${group}&userId=${userId}`),
             fetch(`/api/create-group-data?group=${group}`),
           ]);
 
-          if (!githubRes.ok || !modifiedRes.ok || !groupRes.ok)
+          if (!githubRes.ok || !groupRes.ok)
             throw new Error("Failed to fetch file data");
 
           const githubData = await githubRes.json();
-          const modifiedData = await modifiedRes.json();
           const groupData = await groupRes.json();
 
           setFiles(Array.isArray(githubData) ? githubData : []);
-          setModifiedFiles(
-            Array.isArray(modifiedData.files) ? modifiedData.files : []
-          );
 
+          // Fetch modified files using the new GET endpoint
+          const modifiedRes = await fetch(
+            `/api/modified-files?group=${group}&userId=${userId}`,
+            { method: "GET" }
+          );
+          if (!modifiedRes) throw new Error("Failed to fetch modified files: ");
+
+          const modifiedData = await modifiedRes.json();
+
+          setModifiedFiles(modifiedData ? [modifiedData] : []);
           setGroupOwnerId(groupData.ownerId);
           setGroupOwnerName(groupData.ownerName);
           setGroupName(groupData.groupName);
@@ -207,14 +212,13 @@ const Confirm = ({ group }: GroupProps) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          groupId: group,
           userId,
-          repoOwner: groupOwnerId,
-          repoName: groupName,
           modifiedFiles: modifiedFilesData,
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to commit changes");
+      if (!response) throw new Error("Failed to commit changes");
 
       toast.success("Changes committed successfully!");
     } catch (error) {

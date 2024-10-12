@@ -127,11 +127,12 @@ model File {
 }
 
 model ModifiedFiles{
-    id       Int     @id @default(autoincrement())
+  id       Int     @id @default(autoincrement())
   name      String
   path      String
   content   String   @db.Text
-  userId    String
+  userId    String   @unique
+  changes   Changes[]  @relation("changedFile")
   groupId   String
   modifiedById String?
   modifiedBy  User?     @relation("userModifiedFile",fields: [modifiedById], references: [id])
@@ -140,6 +141,15 @@ model ModifiedFiles{
   group     Group    @relation("modifiedFiles",fields: [groupId], references: [id])
 }
 
+model Changes{
+  id        Int      @id @default(autoincrement())
+  fileId    Int
+  file      ModifiedFiles    @relation("changedFile",fields:[fileId],references: [id])
+  type       String
+  lineNumber Int
+  content    String
+  createdAt  DateTime  @default(now())
+}
 
 model Notifications{
   id        String   @id @default(cuid())
