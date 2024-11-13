@@ -14,7 +14,7 @@ export const Appbar = ({ user, onSignin, onSignout }: AppbarProps) => {
         className="text-8xl font-extrabold text-black tracking-wider hover:text-gray-800 transition-colors duration-300 bg-white p-2 rounded-md"
         href="/"
       >
-        Co-lab
+        Ko-lab
       </a>
       <div>
         <Button
