@@ -54,7 +54,6 @@ export default function Editor({ github, group }: CodeProps) {
             await loadFileContent(data[0].name);
           }
         } catch (error) {
-          console.error("Error fetching file content:", error);
           toast.error("Failed to load the files.");
         } finally {
           setLoading(false);
@@ -79,7 +78,6 @@ export default function Editor({ github, group }: CodeProps) {
           setOpenFiles((prev) => [...prev, name]);
         }
       } catch (error) {
-        console.error("Error fetching file content:", error);
         toast.error("Failed to load the file content.");
       }
     }
@@ -113,9 +111,6 @@ export default function Editor({ github, group }: CodeProps) {
         changes.push({ type: "removed", lineNumber: index + 1, content: line });
       }
     });
-
-    // Log the detected changes
-    console.log("Detected Changes:", changes);
 
     // If any changes, mark as edited
     if (changes.length > 0) {
@@ -157,8 +152,7 @@ export default function Editor({ github, group }: CodeProps) {
             group,
           }),
         });
-        const data = res.json()
-        console.log(data)
+        const data = res.json();
 
         if (!res.ok) {
           throw new Error("Failed to save the file");
@@ -168,7 +162,6 @@ export default function Editor({ github, group }: CodeProps) {
         setIsEdited(false);
         router.push(`/confirm-changes/${group}`);
       } catch (error) {
-        console.error("Error saving file:", error);
         toast.error("Failed to save the file.");
       }
     }

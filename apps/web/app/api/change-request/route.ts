@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     const notification = await prisma.notifications.create({
       data: {
         userId: userId,
-        groupId: groupId, // Now guaranteed to be non-null
+        groupId: groupId,
         ownerId: ownerId,
         ownerName: ownerName,
         userName: userName,

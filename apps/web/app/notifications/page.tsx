@@ -11,6 +11,8 @@ interface NotificationsType {
   ownerId: string;
   ownerName: string;
   groupName: string;
+  status: "raised" | "accepted" | "rejected"; // status for CR
+  reason?: string; // optional field for rejection reason
 }
 
 const NotificationsPage = () => {
@@ -60,10 +62,13 @@ const NotificationsPage = () => {
       <ul className="space-y-2">
         {notifications.map((notification) => (
           <li key={notification.id} className="p-4 border rounded-md shadow">
-            <p className="text-lg">
-              {notification.userName} raised a CR in{" "}
-              <strong>{notification.groupName}</strong>
-            </p>
+            {notification && (
+              <p className="text-lg">
+                {notification.userName} raised a CR in{" "}
+                <strong>{notification.groupName}</strong>
+              </p>
+            )}
+
             <Link
               href={`/confirm-changes/${notification.groupId}`}
               className="mt-2 inline-block text-blue-500 hover:underline"

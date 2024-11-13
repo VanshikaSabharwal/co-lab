@@ -7,6 +7,8 @@ declare module "next-auth" {
       email: string;
       phone?: string;
       name: string;
+      image?: string;
+      githubAccessToken?: string;
     };
   }
 
@@ -15,5 +17,7 @@ declare module "next-auth" {
     email: string;
     phone?: string;
     name: string;
+    image?: string;
+    githubAccessToken?: string;
   }
 }

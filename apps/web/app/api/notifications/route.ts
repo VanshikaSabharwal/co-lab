@@ -22,7 +22,7 @@ export async function GET(req: Request) {
         userId: true,
         userName: true,
       },
-      orderBy: { createdAt: "desc" }, // Optional: Order notifications by creation date
+      orderBy: { createdAt: "desc" },
     });
 
     // If no notifications are found, return an empty array

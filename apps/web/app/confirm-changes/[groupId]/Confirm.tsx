@@ -48,6 +48,8 @@ const Confirm = ({ group }: GroupProps) => {
   const [groupOwnerId, setGroupOwnerId] = useState("");
   const [groupOwnerName, setGroupOwnerName] = useState("");
   const [groupName, setGroupName] = useState("");
+  const [commitLink, setCommitLink] = useState("");
+  const [commitMessage, setCommitMessage] = useState("");
 
   useEffect(() => {
     if (group && userId) {
@@ -171,23 +173,28 @@ const Confirm = ({ group }: GroupProps) => {
         sha: file.sha,
       }));
 
-      const response = await fetch(`/api/commit-changes`, {
+      const response = await fetch("/api/commit-changes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           userId,
-          repoOwner: groupOwnerId,
-          repoName: groupName,
           modifiedFiles: modifiedFilesData,
           groupId: group,
+          message: commitMessage,
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to commit changes");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to commit changes");
+      }
 
+      const responseData = await response.json();
+      setCommitLink(responseData.commitUrl);
       toast.success("Changes committed successfully!");
+      setCommitMessage("");
     } catch (error) {
       console.error("Error while committing changes:", error);
       toast.error("Failed to commit changes.");
@@ -196,42 +203,34 @@ const Confirm = ({ group }: GroupProps) => {
     }
   };
 
-  const handleApprove = async () => {
-    setLoadingState((prev) => ({ ...prev, changeRequestLoading: true }));
+  // const handleRejectCr = async () => {
+  //   const reason = commitMessage || "No reason provided";
 
-    try {
-      const modifiedFilesData = modifiedFiles.map((file) => ({
-        path: file.path,
-        content: file.content,
-        sha: file.sha,
-      }));
+  //   try {
+  //     const response = await fetch("/api/rejected-cr", {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //       },
+  //       body: JSON.stringify({
+  //         message: reason,
+  //         groupId: group,
+  //         userId,
+  //         userName,
+  //         status: "rejected",
+  //       }),
+  //     });
 
-      const response = await fetch(`/api/commit-changes`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          groupId: group,
-          userId,
-          modifiedFiles: modifiedFilesData,
-        }),
-      });
+  //     if (!response.ok) {
+  //       throw new Error("Failed to notify the user about rejection.");
+  //     }
 
-      if (!response) throw new Error("Failed to commit changes");
-
-      toast.success("Changes committed successfully!");
-    } catch (error) {
-      console.error("Error while committing changes:", error);
-      toast.error("Failed to commit changes.");
-    } finally {
-      setLoadingState((prev) => ({ ...prev, changeRequestLoading: false }));
-    }
-  };
-
-  const handleRejectCr = async () => {
-    alert("Rejected CR");
-  };
+  //     toast.success("Change request rejected!");
+  //   } catch (error) {
+  //     console.error("Error while rejecting CR:", error);
+  //     toast.error("Failed to reject change request.");
+  //   }
+  // };
 
   return (
     <div className="flex flex-col h-screen bg-gray-900">
@@ -245,29 +244,50 @@ const Confirm = ({ group }: GroupProps) => {
             <p className="text-white mb-4">
               Hello, {groupOwnerName}! You are the owner of this group.
             </p>
-            <button
-              className="mr-2 bg-green-500 p-2 rounded"
-              onClick={async () => {
-                await handleApprove();
-              }}
-            >
-              Approve
-            </button>
 
-            <button
-              className="bg-red-500 p-2 rounded"
-              onClick={async () => {
-                await handleRejectCr();
-              }}
-            >
-              Reject
-            </button>
+            <div className="commitContainer mb-4">
+              <input
+                type="text"
+                value={commitMessage}
+                onChange={(e) => setCommitMessage(e.target.value)}
+                placeholder="Enter commit message"
+                className="p-2 mb-2 rounded text-black w-full"
+              />
+              <div className="flex gap-2">
+                <button
+                  className="bg-green-600 hover:bg-green-700 text-white p-2 rounded"
+                  onClick={handleApproveCr}
+                >
+                  Approve
+                </button>
+                <button
+                  className="bg-red-600 hover:bg-red-700 text-white p-2 rounded"
+                  // onClick={handleRejectCr}
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+
+            {commitLink && (
+              <p className="mt-4 text-pink-400">
+                Your changes have been committed. You can view them{" "}
+                <a
+                  href={commitLink}
+                  target="_blank"
+                  className="underline hover:text-pink-600"
+                >
+                  here
+                </a>
+                .
+              </p>
+            )}
           </div>
         ) : (
           <button
             onClick={raiseChangeRequest}
             disabled={loadingState.changeRequestLoading}
-            className="bg-blue-500 p-2 rounded"
+            className="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded"
           >
             {loadingState.changeRequestLoading
               ? "Raising..."

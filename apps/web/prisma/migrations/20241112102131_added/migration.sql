@@ -1,4 +1,7 @@
 -- CreateEnum
+CREATE TYPE "FileStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
+
+-- CreateEnum
 CREATE TYPE "GroupRole" AS ENUM ('ADMIN', 'MEMBER');
 
 -- CreateTable
@@ -8,6 +11,7 @@ CREATE TABLE "User" (
     "password" TEXT NOT NULL,
     "username" TEXT NOT NULL,
     "phone" TEXT NOT NULL,
+    "image" TEXT NOT NULL DEFAULT 'default',
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
@@ -63,6 +67,7 @@ CREATE TABLE "Group" (
     "id" TEXT NOT NULL,
     "groupName" TEXT NOT NULL,
     "githubRepo" TEXT NOT NULL,
+    "ownerName" TEXT NOT NULL,
     "githubAccessToken" TEXT NOT NULL,
     "ownerId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -104,6 +109,64 @@ CREATE TABLE "GroupMessage" (
 );
 
 -- CreateTable
+CREATE TABLE "File" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "path" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "ownerId" TEXT NOT NULL DEFAULT '',
+    "ownerName" TEXT NOT NULL DEFAULT '',
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "group" TEXT NOT NULL,
+    "status" "FileStatus" NOT NULL DEFAULT 'PENDING',
+
+    CONSTRAINT "File_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ModifiedFiles" (
+    "id" SERIAL NOT NULL,
+    "name" TEXT NOT NULL,
+    "path" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "groupId" TEXT NOT NULL,
+    "modifiedById" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ModifiedFiles_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Changes" (
+    "id" SERIAL NOT NULL,
+    "fileId" INTEGER NOT NULL,
+    "type" TEXT NOT NULL,
+    "lineNumber" INTEGER NOT NULL,
+    "content" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Changes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Notifications" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "groupId" TEXT NOT NULL,
+    "userName" TEXT NOT NULL,
+    "ownerId" TEXT NOT NULL,
+    "ownerName" TEXT NOT NULL,
+    "groupName" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Notifications_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "_ChatParticipants" (
     "A" TEXT NOT NULL,
     "B" TEXT NOT NULL
@@ -129,6 +192,12 @@ CREATE UNIQUE INDEX "Invite_phone_key" ON "Invite"("phone");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Invite_phone_groupId_key" ON "Invite"("phone", "groupId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "File_userId_key" ON "File"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ModifiedFiles_userId_key" ON "ModifiedFiles"("userId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "_ChatParticipants_AB_unique" ON "_ChatParticipants"("A", "B");
@@ -165,6 +234,15 @@ ALTER TABLE "GroupMessage" ADD CONSTRAINT "GroupMessage_senderId_fkey" FOREIGN K
 
 -- AddForeignKey
 ALTER TABLE "GroupMessage" ADD CONSTRAINT "GroupMessage_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "Group"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ModifiedFiles" ADD CONSTRAINT "ModifiedFiles_modifiedById_fkey" FOREIGN KEY ("modifiedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ModifiedFiles" ADD CONSTRAINT "ModifiedFiles_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "Group"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Changes" ADD CONSTRAINT "Changes_fileId_fkey" FOREIGN KEY ("fileId") REFERENCES "ModifiedFiles"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "_ChatParticipants" ADD CONSTRAINT "_ChatParticipants_A_fkey" FOREIGN KEY ("A") REFERENCES "Chat"("id") ON DELETE CASCADE ON UPDATE CASCADE;
