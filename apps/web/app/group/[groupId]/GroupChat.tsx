@@ -216,14 +216,16 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   }
 
   return (
-    <div className="flex flex-col h-screen  bg-gray-100">
+    <div className="flex flex-col h-screen bg-gray-100">
       <div className="flex-1 overflow-hidden">
-        <div className="max-w-3xl mx-auto bg-white shadow-lg rounded-lg overflow-hidden flex flex-col h-full">
+        <div className="max-w-full sm:max-w-3xl mx-auto bg-white shadow-lg rounded-lg overflow-hidden flex flex-col h-full">
           <div className="bg-blue-500 text-white p-4">
-            <h1 className="text-2xl font-bold text-center">
+            <h1 className="text-xl sm:text-2xl font-bold text-center">
               {groupDetails?.groupName}
             </h1>
-            <h2 className="text-sm text-center mt-1">Group ID: {group}</h2>
+            <h2 className="text-xs sm:text-sm text-center mt-1">
+              Group ID: {group}
+            </h2>
             <Link href={`/code-editor/${group}/${groupName}`}>
               <button className="mt-2 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition duration-300">
                 Code Editor
@@ -237,14 +239,10 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
             {messages.map((msg, index) => (
               <div
                 key={index}
-                className={`flex mb-4 ${
-                  msg.senderId === session?.user?.id
-                    ? "justify-end"
-                    : "justify-start"
-                }`}
+                className={`flex mb-4 ${msg.senderId === session?.user?.id ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-xs lg:max-w-md xl:max-w-lg break-words p-3 rounded-lg ${
+                  className={`max-w-xs sm:max-w-md md:max-w-lg break-words p-3 rounded-lg ${
                     msg.senderId === session?.user?.id
                       ? "bg-blue-500 text-white"
                       : "bg-gray-200 text-black"
@@ -260,56 +258,23 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
             ))}
             <div ref={messagesEndRef} />
           </div>
-          <div className="bg-gray-100 p-4">
-            <div className="flex items-center">
+          <div className="bg-white border-t-2 p-4">
+            <div className="flex items-center space-x-4">
               <input
                 type="text"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 placeholder="Type a message..."
-                className="flex-1 border border-gray-300 rounded-l-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                className="w-full border rounded-lg px-4 py-2 text-sm"
               />
               <button
                 onClick={handleSendMessage}
-                className={`bg-blue-500 text-white p-2 rounded-r-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  !isMember && session?.user.id !== groupDetails?.ownerId
-                    ? "opacity-50 cursor-not-allowed"
-                    : ""
-                }`}
-                disabled={
-                  !isMember && session?.user.id !== groupDetails?.ownerId
-                }
+                className="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition duration-200"
               >
-                <FaPaperPlane />
+                <FaPaperPlane size={20} />
               </button>
             </div>
           </div>
-        </div>
-      </div>
-      <div className="bg-white shadow-lg rounded-lg mt-4 p-8 max-w-3xl mx-auto">
-        <div className="flex justify-between items-center gap-2">
-          {isOwner && (
-            <a
-              href={`/addGroupMember/${group}`}
-              className="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600 transition duration-300"
-            >
-              Add Member
-            </a>
-          )}
-          <a
-            href={`/viewMembers/${group}`}
-            className="flex items-center text-blue-600 hover:text-blue-800 transition duration-300"
-          >
-            <FaUsers className="mr-2" />
-            View Members
-          </a>
-          <a
-            href={groupDetails?.githubRepo}
-            className="bg-gray-800 text-white py-2 px-4 rounded hover:bg-gray-700 transition duration-300"
-          >
-            GitHub Repo
-          </a>
         </div>
       </div>
     </div>
