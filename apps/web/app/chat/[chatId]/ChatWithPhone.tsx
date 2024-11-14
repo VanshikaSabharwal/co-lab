@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation"; // Add this for navigation
 
 interface ChatWithPhoneProps {
   phone: string;
@@ -22,6 +23,10 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
   const wsRef = useRef<WebSocket | null>(null);
   const chatId = [session?.user?.phone, phone].sort().join("-");
   const userId = session?.user.phone;
+  const router = useRouter(); // For redirection
+
+  // Notification state
+  const [notification, setNotification] = useState<string | null>(null);
 
   // Load messages from localStorage
   useEffect(() => {
@@ -55,6 +60,11 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
 
             if (message.chatId === chatId) {
               setMessages((prevMessages) => [...prevMessages, message]);
+            } else {
+              // Notify user if the message is from someone else
+              setNotification(
+                `New message from ${message.senderId}. View Message.`
+              );
             }
           } catch (err) {
             console.error("Error parsing message: ", err);
@@ -99,10 +109,15 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
     }
   };
 
-  // Handle chat deletion
   const handleDeleteChat = () => {
     localStorage.removeItem(chatId);
     setMessages([]);
+  };
+
+  const handleViewMessage = () => {
+    // Navigate to the chat
+    router.push(`/chat/${chatId}`);
+    setNotification(null); // Clear notification when navigating
   };
 
   return (
@@ -116,6 +131,15 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
           Delete Chat
         </button>
       </div>
+
+      {notification && (
+        <div
+          className="fixed bottom-4 left-4 p-4 bg-yellow-500 text-white rounded-lg cursor-pointer"
+          onClick={handleViewMessage}
+        >
+          {notification}
+        </div>
+      )}
 
       <div className="flex-grow p-6 overflow-y-auto">
         {messages.map((msg, index) => (
