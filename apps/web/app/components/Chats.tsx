@@ -4,13 +4,8 @@ import React, { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import FriendSearch from "../components/FriendSearch";
 import Notifications from "./Notifications";
-
-// Example contact list with phone numbers
-const contacts = [
-  { id: "1", name: "Contact 1", phone: "123-456-7890" },
-  { id: "2", name: "Contact 2", phone: "234-567-8901" },
-  { id: "3", name: "Contact 3", phone: "345-678-9012" },
-];
+import { motion } from "framer-motion";
+import GroupChat from "../group/[groupId]/GroupChat";
 
 interface Group {
   id: string;
@@ -20,102 +15,109 @@ interface Group {
   githubRepo: string;
 }
 
-const ChatApp = () => {
+export default function Component() {
   const { data: session } = useSession();
-  const [selectedChat, setSelectedChat] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const user = session?.user.id;
+  const [selectedChat, setSelectedChat] = useState<Group | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [isMobileView, setIsMobileView] = useState(false);
 
-  // fetch all groups in which user is either a member or owner
+  const user = session?.user?.id;
+
   useEffect(() => {
     const fetchGroups = async () => {
       if (session?.user?.id) {
         try {
           const res = await fetch(`/api/my-groups?userId=${user}`);
           const data = await res.json();
-          // Ensure data.groups is an array
           setGroups(Array.isArray(data.groups) ? data.groups : []);
         } catch (error) {
           console.error("Error fetching groups:", error);
-          setGroups([]); // Set to empty array on error
+          setGroups([]);
         }
       }
     };
     fetchGroups();
-  }, [session]);
 
-  // Filter contacts based on search term
-  const filteredContacts = contacts.filter(
-    (contact) =>
-      contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contact.phone.includes(searchTerm)
-  );
+    const handleResize = () => {
+      setIsMobileView(window.innerWidth <= 768);
+    };
 
-  return session ? (
-    <div className="flex h-screen ">
-      {/* Left side: Contact List */}
-      <div className="w-full md:w-1/4 text-black-500 p-4 flex flex-col justify-between h-full">
-        <div>
-          <h1 className="text-2xl font-bold text-black-500 mb-6">Contacts</h1>
-          <FriendSearch />
-        </div>
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [session, user]);
 
-        {/* {groups.length > 0 && (
-          <div className="mt-8 w-full max-w-md">
-            <h2 className="text-xl text-black-500 font-bold mb-4">
-              My Groups:
-            </h2>
-            <ul className="space-y-4">
-              {groups.map((group) => (
-                <li
-                  key={group.id}
-                  className="bg-blue-500 hover:bg-blue-400  p-4 rounded-md  transition-colors"
-                >
-                  <strong>Group Name:</strong> {group.groupName} <br />
-                  <a
-                    href={group.githubRepo}
-                    className="text-blue-200 underline hover:text-blue-300"
-                  >
-                    GitHub Repo: {group.githubRepo}
-                  </a>
-                  <a
-                    href={`group/${group.id}`}
-                    className="block mt-2 text-blue-200 underline hover:text-blue-300"
-                  >
-                    Group ID: {group.id}
-                  </a>
-                </li>
-              ))}
-            </ul>
+  const handleGroupClick = (group: Group) => {
+    if (isMobileView) {
+      window.location.href = `/group/${group.id}`;
+    } else {
+      setSelectedChat(group);
+    }
+  };
+
+  if (!session) {
+    return (
+      <p className="text-center text-gray-400">Please Sign In to see chats</p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col md:flex-row h-screen bg-gradient-to-br from-gray-900 to-black text-white overflow-hidden">
+      {/* Sidebar */}
+      <div className="w-full md:w-1/4 p-4 bg-gray-800 bg-opacity-50 border-b md:border-r border-gray-700 overflow-y-auto">
+        <div className="flex flex-col space-y-4">
+          <Notifications />
+          <div className="text-sm">
+            <p>
+              <strong>Email:</strong> {session.user?.email || "User"}
+            </p>
+            <p>
+              <strong>Phone:</strong> {session.user?.phone || "No phone number"}
+            </p>
           </div>
-        )} */}
-        {/* notifications section  */}
-        <Notifications />
-
-        {/* Bottom section: Email and Phone */}
-        <div className="border-t border-blue-200 text-black-500 mt-6 pt-4 text-center">
-          <p className="text-sm">
-            <strong>Email:</strong> {session?.user?.email || "User"}
-          </p>
-          <p className="text-sm">
-            <strong>Phone:</strong> {session?.user?.phone || "No phone number"}
-          </p>
+        </div>
+        <h1 className="text-2xl font-bold text-gray-300 my-6">Contacts</h1>
+        <FriendSearch />
+        <div className="mt-8">
+          <h2 className="text-xl font-semibold text-gray-400 mb-4">
+            My Groups:
+          </h2>
+          <ul className="space-y-4">
+            {groups.map((group) => (
+              <li
+                key={group.id}
+                onClick={() => handleGroupClick(group)}
+                className="p-4 bg-gray-700 rounded-md cursor-pointer transition-all duration-300 hover:shadow-lg hover:bg-gray-600"
+              >
+                <strong>Group Name:</strong> {group.groupName} <br />
+                <a
+                  href={group.githubRepo}
+                  className="text-blue-400 underline hover:text-blue-500"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  GitHub Repo
+                </a>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
 
-      {/* Right side: Chat Area */}
-      <div
-        className={`${
-          selectedChat ? "block" : "hidden md:block"
-        } w-full md:w-3/4 bg-blue-100 p-6 flex flex-col justify-between h-full`}
+      {/* Chat Area */}
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.5 }}
+        className="w-full md:w-3/4 p-4 bg-gray-900 flex flex-col justify-between h-full hidden md:block"
       >
-        {/* Chat content can go here */}
-      </div>
+        {selectedChat ? (
+          <GroupChat group={selectedChat.id} />
+        ) : (
+          <div className="text-gray-300 text-lg text-center mt-10">
+            Select a group to start chatting
+          </div>
+        )}
+      </motion.div>
     </div>
-  ) : (
-    <p className="text-center text-blue-600">Please Sign In to see chats</p>
   );
-};
-
-export default ChatApp;
+}
