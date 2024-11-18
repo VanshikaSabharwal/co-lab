@@ -50,6 +50,7 @@ const Confirm = ({ group }: GroupProps) => {
   const [groupName, setGroupName] = useState("");
   const [commitLink, setCommitLink] = useState("");
   const [commitMessage, setCommitMessage] = useState("");
+  let crUserId: string;
 
   useEffect(() => {
     if (group && userId) {
@@ -145,6 +146,10 @@ const Confirm = ({ group }: GroupProps) => {
 
       if (!response.ok) throw new Error("Failed to raise change request");
 
+      // Fetch the userId of the person who raised the CR and store it
+      const crData = await response.json();
+      const crUserId = crData.userId;
+
       toast.success("Change request raised successfully!");
     } catch (error) {
       console.error("Error while raising CR:", error);
@@ -203,35 +208,9 @@ const Confirm = ({ group }: GroupProps) => {
     }
   };
 
-  // const handleRejectCr = async () => {
-  //   const reason = commitMessage || "No reason provided";
-
-  //   try {
-  //     const response = await fetch("/api/rejected-cr", {
-  //       method: "POST",
-  //       headers: {
-  //         "Content-Type": "application/json",
-  //       },
-  //       body: JSON.stringify({
-  //         message: reason,
-  //         groupId: group,
-  //         userId,
-  //         userName,
-  //         status: "rejected",
-  //       }),
-  //     });
-
-  //     if (!response.ok) {
-  //       throw new Error("Failed to notify the user about rejection.");
-  //     }
-
-  //     toast.success("Change request rejected!");
-  //   } catch (error) {
-  //     console.error("Error while rejecting CR:", error);
-  //     toast.error("Failed to reject change request.");
-  //   }
-  // };
-
+  const handleRejectCr = async () => {
+    alert("this is rejected");
+  };
   return (
     <div className="flex flex-col h-screen bg-gray-900">
       <div className="flex-none p-4 bg-gray-800">
@@ -262,7 +241,7 @@ const Confirm = ({ group }: GroupProps) => {
                 </button>
                 <button
                   className="bg-red-600 hover:bg-red-700 text-white p-2 rounded"
-                  // onClick={handleRejectCr}
+                  onClick={handleRejectCr}
                 >
                   Reject
                 </button>

@@ -6,6 +6,7 @@ import FriendSearch from "../components/FriendSearch";
 import Notifications from "./Notifications";
 import { motion } from "framer-motion";
 import GroupChat from "../group/[groupId]/GroupChat";
+import Cookies from "js-cookie";
 
 interface Group {
   id: string;
@@ -14,18 +15,31 @@ interface Group {
   groupName: string;
   githubRepo: string;
 }
+interface GuestData {
+  guestId: string;
+}
 
 export default function Component() {
   const { data: session } = useSession();
   const [selectedChat, setSelectedChat] = useState<Group | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [isMobileView, setIsMobileView] = useState(false);
+  const [guestData, setGuestData] = useState<GuestData | null>(null);
 
   const user = session?.user?.id;
 
   useEffect(() => {
+    const guestId = Cookies.get("guestId");
+    if (guestId) {
+      setGuestData({ guestId });
+    }
+  }, []);
+
+  // Fetch Groups and Handle Responsive Layout
+  useEffect(() => {
     const fetchGroups = async () => {
-      if (session?.user?.id) {
+      if (session?.user?.id || guestData?.guestId) {
+        // Check for either session or guest
         try {
           const res = await fetch(`/api/my-groups?userId=${user}`);
           const data = await res.json();
@@ -45,7 +59,7 @@ export default function Component() {
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [session, user]);
+  }, [session, user, guestData]);
 
   const handleGroupClick = (group: Group) => {
     if (isMobileView) {
@@ -55,9 +69,11 @@ export default function Component() {
     }
   };
 
-  if (!session) {
+  if (!session && !guestData) {
     return (
-      <p className="text-center text-gray-400">Please Sign In to see chats</p>
+      <p className="text-center text-gray-400">
+        Please Sign In or Use Guest Mode to see chats
+      </p>
     );
   }
 
@@ -69,10 +85,11 @@ export default function Component() {
           <Notifications />
           <div className="text-sm">
             <p>
-              <strong>Email:</strong> {session.user?.email || "User"}
+              <strong>Email:</strong> {session?.user?.email || "Guest"}
             </p>
             <p>
-              <strong>Phone:</strong> {session.user?.phone || "No phone number"}
+              <strong>Phone:</strong>{" "}
+              {session?.user?.phone || "No phone number"}
             </p>
           </div>
         </div>
@@ -101,6 +118,14 @@ export default function Component() {
             ))}
           </ul>
         </div>
+        {/* Guest User Section */}
+        {guestData && (
+          <div className="mt-8 p-4 bg-gray-700 rounded-md">
+            <p className="text-sm text-gray-300">
+              Welcome, Guest! Your ID: <strong>{guestData.guestId}</strong>
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Chat Area */}

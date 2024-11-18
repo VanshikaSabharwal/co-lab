@@ -2,6 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import toast from "react-hot-toast";
+import Cookies from "js-cookie";
+
+interface GuestData {
+  guestId: string;
+}
 
 interface Group {
   id: string;
@@ -16,13 +22,22 @@ const CreateGroup = () => {
   const [githubOwnerName, setGithubOwnerName] = useState("");
   const [githubAccessToken, setGithubAccessToken] = useState("");
   const ownerId = session?.user.id;
+  const [guestData, setGuestData] = useState<GuestData | null>(null);
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [showNote, setShowNote] = useState(true);
 
   // Show a toast note on page load
   useEffect(() => {
-    setShowNote(true); // Ensure the note is shown when the component mounts
+    setShowNote(true);
+  }, []);
+
+  // Check if a guestId already exists in the cookies on mount
+  useEffect(() => {
+    const guestId = Cookies.get("guestId");
+    if (guestId) {
+      setGuestData({ guestId });
+    }
   }, []);
 
   const handleCreateGroup = async (e: React.FormEvent) => {
@@ -34,6 +49,9 @@ const CreateGroup = () => {
       return;
     }
 
+    if (guestData) {
+      toast.error("Please Sign Up/Login to send messages");
+    }
     const response = await fetch("/api/create-group-data", {
       method: "POST",
       headers: {
@@ -56,12 +74,12 @@ const CreateGroup = () => {
       setGithubRepo("");
       setGithubOwnerName(""); // Reset owner name
       setGithubAccessToken("");
-      alert(
+      toast.success(
         `Group "${newGroup.groupName}" created successfully with ID: ${newGroup.id}`
       );
     } else {
       const errorData = await response.json();
-      alert(`Error: ${errorData.error}`);
+      toast.error(`Error: ${errorData.error}`);
     }
   };
 

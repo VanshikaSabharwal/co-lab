@@ -2,13 +2,27 @@
 
 import React from "react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import { Code, MessageSquare, Users } from "lucide-react"; // Added Users icon for group chat
 import Footer from "@repo/ui/footer";
+import Cookies from "js-cookie";
+
+interface GuestData {
+  guestId: string;
+}
 
 const HeroSection = () => {
   const { data: session } = useSession();
+  const [guestData, setGuestData] = useState<GuestData | null>(null);
+
+  useEffect(() => {
+    const guestId = Cookies.get("guestId");
+    if (guestId) {
+      setGuestData({ guestId });
+    }
+  }, []);
 
   return (
     <div>
@@ -43,7 +57,7 @@ const HeroSection = () => {
           {/* Buttons Container */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             {/* Get Started or Chat Room Button */}
-            {session ? (
+            {session || guestData ? (
               <Link
                 href="/chat-room"
                 className="px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-full text-lg font-semibold transition-all duration-300 shadow-lg hover:shadow-blue-500/30 hover:-translate-y-1 active:translate-y-0 active:shadow-lg"

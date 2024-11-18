@@ -2,10 +2,15 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation"; // Add this for navigation
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+import Cookies from "js-cookie";
 
 interface ChatWithPhoneProps {
   phone: string;
+}
+interface GuestData {
+  guestId: string;
 }
 
 interface Message {
@@ -23,12 +28,17 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
   const wsRef = useRef<WebSocket | null>(null);
   const chatId = [session?.user?.phone, phone].sort().join("-");
   const userId = session?.user.phone;
-  const router = useRouter(); // For redirection
-
-  // Notification state
+  const router = useRouter();
+  const [guestData, setGuestData] = useState<GuestData | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
 
-  // Load messages from localStorage
+  useEffect(() => {
+    const guestId = Cookies.get("guestId");
+    if (guestId) {
+      setGuestData({ guestId });
+    }
+  }, []);
+
   useEffect(() => {
     const savedMessages = localStorage.getItem(chatId);
     if (savedMessages) {
@@ -93,7 +103,9 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
 
   const handleSendMessage = () => {
     if (!newMessage.trim()) return;
-
+    if (guestData) {
+      toast.error("Please Sign Up/Login to send messages");
+    }
     const messageToSend: Message = {
       chatId,
       senderId: session?.user?.phone || "unknown",

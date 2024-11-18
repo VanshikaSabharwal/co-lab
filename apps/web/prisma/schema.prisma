@@ -162,6 +162,43 @@ model Notifications{
   groupName String
   createdAt DateTime @default(now())
 }
+model RejectedCr{
+ id        String   @id @default(cuid())
+ message   String
+ groupId   String
+ groupName String
+ userId    String
+ userName  String
+createdAt  DateTime  @default(now())
+}
+model ApprovedCr{
+  id        String   @id @default(cuid())
+  message   String
+  userId    String
+  groupId   String
+  groupName String
+  userName  String
+  createdAt  DateTime  @default(now())
+
+}
+model GuestUser {
+  id          String       @id @default(cuid())
+  guestId     String
+  createdAt   DateTime     @default(now())
+  expiresAt   DateTime
+  guestGroups GuestGroup[] @relation("UserToGuestGroups")
+}
+
+model GuestGroup {
+  id        String  @id @default(cuid())
+  groupId   String
+  ownerId   String
+  userId    String
+  user      GuestUser @relation("UserToGuestGroups", fields: [userId], references: [id]) 
+
+  @@index([userId])
+}
+
 enum FileStatus {
   PENDING
   APPROVED

@@ -46,7 +46,7 @@ export async function POST(req: Request) {
 
     // Return success response with required data
     return NextResponse.json(
-      { success: true, notification, ownerId, ownerName, groupName },
+      { success: true, notification, userId, ownerId, ownerName, groupName },
       { status: 201 }
     );
   } catch (error) {
