@@ -142,7 +142,7 @@ export default function CreateGroup() {
             (e) => setGroupName(e.target.value),
             "Enter group name",
             <FaLink className="ml-2" />,
-            "/images/Github-1.png"
+            "images/Github-1.png"
           )}
           {renderInput(
             "GitHub Repository URL:",
@@ -150,7 +150,7 @@ export default function CreateGroup() {
             (e) => setGithubRepo(e.target.value),
             "Enter GitHub repository URL",
             <FaGithub className="ml-2" />,
-            "/images/Github-1.png"
+            "images/Github-1.png"
           )}
           {renderInput(
             "GitHub Owner Name:",
@@ -158,7 +158,7 @@ export default function CreateGroup() {
             (e) => setGithubOwnerName(e.target.value),
             "Enter GitHub owner name",
             <FaUser className="ml-2" />,
-            "/images/Github-2.png"
+            "images/Github-2.png"
           )}
           {renderInput(
             "GitHub Access Token:",
@@ -166,7 +166,7 @@ export default function CreateGroup() {
             (e) => setGithubAccessToken(e.target.value),
             "Enter GitHub access token",
             null,
-            "/images/Github-.png"
+            "images/Github-3.png"
           )}
 
           <button
