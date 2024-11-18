@@ -110,22 +110,6 @@ export const authOptions: NextAuthOptions = {
       },
     }),
 
-    GitHubProvider({
-      clientId: process.env.GITHUB_CLIENT_ID as string,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET as string,
-      authorization: { params: { scope: "repo" } },
-      async profile(profile, tokens) {
-        console.log("GitHub profile:", profile);
-        console.log("GitHub tokens:", tokens); // Log tokens
-        return {
-          id: profile.id.toString(),
-          name: profile.name || profile.login,
-          email: profile.email,
-          image: profile.avatar_url,
-          accessToken: tokens.access_token, // Ensure access token is available here
-        };
-      },
-    }),
   ],
 
   secret: process.env.JWT_SECRET,
