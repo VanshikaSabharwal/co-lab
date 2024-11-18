@@ -103,7 +103,7 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
 
   const handleSendMessage = () => {
     if (!newMessage.trim()) return;
-    if (guestData) {
+    if (guestData && !session) {
       toast.error("Please Sign Up/Login to send messages");
     }
     const messageToSend: Message = {
