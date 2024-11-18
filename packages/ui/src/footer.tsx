@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { X, Linkedin, Github } from "lucide-react";
 
 const Footer = () => {
   return (
@@ -25,6 +26,27 @@ const Footer = () => {
             className="text-sm hover:text-blue-400 transition-colors duration-300"
           >
             Contact Us
+          </Link>
+          <Link
+            href="https://github.com/VanshikaSabharwal/co-lab"
+            target="_blank"
+            className="text-sm hover:text-blue-400 transition-colors duration-300"
+          >
+            <Github />
+          </Link>
+          <Link
+            href="https://www.linkedin.com/in/vanshika-sabharwal-867237284/"
+            target="_blank"
+            className="text-sm hover:text-blue-400 transition-colors duration-300"
+          >
+            <Linkedin />
+          </Link>
+          <Link
+            href="https://x.com/Vanshika_0006"
+            target="_blank"
+            className="text-sm hover:text-blue-400 transition-colors duration-300"
+          >
+            <X />
           </Link>
         </div>
       </div>
