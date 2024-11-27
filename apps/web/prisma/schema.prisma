@@ -199,6 +199,13 @@ model GuestGroup {
   @@index([userId])
 }
 
+model Testimonial{
+  id        String   @id @default(cuid())
+  name    String
+  description String
+  userId      String? @unique
+  createdAt   DateTime @default(now())
+}
 enum FileStatus {
   PENDING
   APPROVED

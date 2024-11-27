@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
-import { Code, MessageSquare, Users } from "lucide-react"; // Added Users icon for group chat
+import { Code, MessageSquare, Users } from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
 import Footer from "@repo/ui/footer";
 import Cookies from "js-cookie";
+import toast from "react-hot-toast";
 
 interface GuestData {
   guestId: string;
@@ -16,13 +18,99 @@ interface GuestData {
 const HeroSection = () => {
   const { data: session } = useSession();
   const [guestData, setGuestData] = useState<GuestData | null>(null);
+  const [testimonials, setTestimonials] = useState<
+    { id: string; name: string; description: string; userId: string }[]
+  >([]);
+  const [inputName, setInputName] = useState("");
+  const [inputDescription, setInputDescription] = useState("");
+  const testimonialUserId = session?.user?.email || guestData?.guestId;
 
   useEffect(() => {
-    const guestId = Cookies.get("guestId");
-    if (guestId) {
-      setGuestData({ guestId });
+    let guestId = Cookies.get("guestId");
+    if (!guestId) {
+      guestId = uuidv4();
+      Cookies.set("guestId", guestId, { expires: 365 });
     }
+    setGuestData({ guestId });
   }, []);
+
+  useEffect(() => {
+    const fetchTestimonials = async () => {
+      try {
+        const response = await fetch("/api/testimonial-card");
+        if (response.ok) {
+          const data = await response.json();
+          setTestimonials(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch testimonials:", err);
+      }
+    };
+    fetchTestimonials();
+  }, []);
+
+  const handleAddTestimonial = async () => {
+    try {
+      const userId = session?.user?.email || guestData?.guestId;
+
+      if (!userId) {
+        toast.error("Could not determine user identity.");
+        return;
+      }
+      const response = await fetch("/api/testimonial-card", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: inputName,
+          description: inputDescription,
+          userId,
+        }),
+      });
+      if (response.ok) {
+        const newTestimonial = await response.json();
+        setTestimonials((prev) => [...prev, newTestimonial]);
+        setInputName("");
+        setInputDescription("");
+        toast.success(
+          "Your response has been added to the Testimonials section. Thanks for your feedback!"
+        );
+      } else {
+        const errorData = await response.json();
+        toast.error(`Error: ${errorData.error}`);
+      }
+    } catch (err) {
+      console.error("Error adding testimonial: ", err);
+      toast.error("Failed to add testimonial. Please try again.");
+    }
+  };
+  const handleDeleteTestimonial = async (id: string) => {
+    try {
+      const userId = session?.user?.email || guestData?.guestId;
+      const canDelete = (id: string) =>
+        testimonials.some(
+          (t) => t.id === id && t.userId === session?.user?.email
+        );
+
+      const response = await fetch("/api/testimonial-card", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (response.ok) {
+        setTestimonials((prev) =>
+          prev.filter((testimonial) => testimonial.id !== id)
+        );
+        toast.success("Testimonial deleted successfully.");
+      } else {
+        const errorData = await response.json();
+        toast.error(`Error: ${errorData.error}`);
+      }
+    } catch (err) {
+      console.error("Error deleting testimonial:", err);
+      toast.error("Failed to delete testimonial. Please try again.");
+    }
+  };
 
   return (
     <div>
@@ -128,6 +216,69 @@ const HeroSection = () => {
           </div>
         </motion.div>
       </div>
+
+      {/* testimonials.  */}
+      {/* testimonials.  */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8 }}
+        className="mt-16 max-w-2xl mx-auto "
+      >
+        <h2 className="text-3xl font-bold mb-6 text-center ">Testimonials</h2>
+        <div className="flex flex-wrap justify-center gap-6">
+          {testimonials.length > 0 ? (
+            testimonials.map((testimonial, index) => (
+              <div
+                key={index}
+                className="flex-1 min-w-[300px] max-w-[800px] p-6 bg-gray-800 text-white rounded-lg shadow-lg hover:shadow-xl transition-all"
+              >
+                {/* Review text centered */}
+                <p className="text-lg font-medium text-gray-200 text-center mb-4">
+                  "{testimonial.description}"
+                </p>
+                <div className="text-sm text-gray-400 font-semibold text-right">
+                  - {testimonial.name}
+                </div>
+                {testimonialUserId === testimonial.userId && (
+                  <button
+                    onClick={() => handleDeleteTestimonial(testimonial.id)}
+                    className="absolute top-4 right-4 bg-red-600 text-white text-xs px-2 py-1 rounded hover:bg-red-500 transition-all"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-400 text-center">No testimonials yet.</p>
+          )}
+        </div>
+
+        <div className="mt-8 p-4 bg-gray-800 rounded-lg shadow-lg">
+          <h3 className="text-xl font-semibold mb-4">Add Your Testimonial</h3>
+          <input
+            type="text"
+            value={inputName}
+            onChange={(e) => setInputName(e.target.value)}
+            placeholder="Your Name"
+            className="w-full mb-4 p-2 rounded bg-gray-700 text-white focus:outline-none"
+          />
+          <textarea
+            value={inputDescription}
+            onChange={(e) => setInputDescription(e.target.value)}
+            placeholder="Your Testimonial"
+            className="w-full mb-4 p-2 rounded bg-gray-700 text-white focus:outline-none"
+            rows={4}
+          />
+          <button
+            onClick={handleAddTestimonial}
+            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg shadow-lg hover:bg-blue-500 transition-all"
+          >
+            Submit Testimonial
+          </button>
+        </div>
+      </motion.div>
       <Footer />
     </div>
   );
