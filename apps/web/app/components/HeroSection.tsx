@@ -243,7 +243,7 @@ const HeroSection = () => {
                 {testimonialUserId === testimonial.userId && (
                   <button
                     onClick={() => handleDeleteTestimonial(testimonial.id)}
-                    className="absolute top-4 right-4 bg-red-600 text-white text-xs px-2 py-1 rounded hover:bg-red-500 transition-all"
+                    className="bg-red-600 text-white text-xs px-2 py-1 rounded hover:bg-red-500 transition-all"
                   >
                     Delete
                   </button>
