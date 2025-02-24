@@ -15,7 +15,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Ko-Lab,
+  title: "Ko-Lab",
   description: "Collaborative code Editor with group chat and one to one chat functionalities ",
 };
 
