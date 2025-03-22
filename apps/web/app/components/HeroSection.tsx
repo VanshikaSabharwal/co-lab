@@ -218,7 +218,7 @@ const HeroSection = () => {
       </div>
 
       {/* testimonials.  */}
-      {/* <motion.div
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8 }}
@@ -232,6 +232,7 @@ const HeroSection = () => {
                 key={index}
                 className="flex-1 min-w-[300px] max-w-[800px] p-6 bg-gray-800 text-white rounded-lg shadow-lg hover:shadow-xl transition-all"
               >
+                {/* Review text centered */}
                 <p className="text-lg font-medium text-gray-200 text-center mb-4">
                   "{testimonial.description}"
                 </p>
@@ -276,9 +277,7 @@ const HeroSection = () => {
             Submit Testimonial
           </button>
         </div>
-      </motion.div> */}
-
-      
+      </motion.div>
       <Footer />
     </div>
   );

@@ -12,7 +12,7 @@ const Header = () => {
         onSignin={signIn}
         onSignout={async () => {
           await signOut();
-          router.push("/signin");
+          router.push("/signup");
         }}
         user={session?.data?.user ? session.data.user : null}
       />
