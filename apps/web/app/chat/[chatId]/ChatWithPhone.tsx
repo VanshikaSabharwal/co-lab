@@ -68,6 +68,8 @@ const getWebSocketUrl = () => {
   // For development: connect directly to WebSocket server on port 8080
   if (process.env.NODE_ENV === 'development') {
     return `ws://localhost:8080/ws?userId=${userId}`;
+  }else if(process.env.NODE_ENV === 'production'){
+ return `${process.env.WEB_SOCKET_URL}/ws?userId=${userId}`
   }
   
   // For production: use the same host but different path

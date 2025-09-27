@@ -107,9 +107,13 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
       // Establish WebSocket connection
       if (!wsRef.current) {
 
-        if(process.env.NODE_ENV == "development"){
+        if(process.env.NODE_ENV === 'development'){
            wsRef.current = new WebSocket(
           `ws://localhost:8080/ws?userId=${senderId}&groupId=${group}`
+        );
+        }else if(process.env.NODE_ENV === 'production'){
+                  wsRef.current = new WebSocket(
+          `${process.env.WEB_SOCKET_URL}/ws?userId=${senderId}&groupId=${group}`
         );
         }
         wsRef.current = new WebSocket(
