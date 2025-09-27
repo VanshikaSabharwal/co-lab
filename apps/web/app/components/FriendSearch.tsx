@@ -10,7 +10,7 @@ interface Friend {
 }
 
 const FriendSearch = () => {
-  const { data: session } = useSession();
+  // const { data: session } = useSession();
   const [friendNumber, setFriendNumber] = useState("");
   const [friend, setFriend] = useState<Friend | null>(null);
   const [error, setError] = useState<string | null>(null);

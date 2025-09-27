@@ -61,7 +61,6 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
   }
 }, [status, session?.user?.email, phone]);
 
-  // Get WebSocket URL based on environment
 // Get WebSocket URL based on environment
 const getWebSocketUrl = () => {
   if (!userId) return "";
@@ -72,8 +71,7 @@ const getWebSocketUrl = () => {
   }
   
   // For production: use the same host but different path
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/ws?userId=${userId}`;
+ return `${process.env.WEB_SOCKET_URL}/ws?userId=${userId}`
 };
 
   useEffect(() => {
