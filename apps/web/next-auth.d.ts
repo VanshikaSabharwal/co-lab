@@ -9,6 +9,8 @@ declare module "next-auth" {
       name: string;
       image?: string;
       githubAccessToken?: string;
+      accessToken: string;
+      provider: string;
     };
   }
 
@@ -19,5 +21,7 @@ declare module "next-auth" {
     name: string;
     image?: string;
     githubAccessToken?: string;
+    accessToken: string;
+    provider: string;
   }
 }

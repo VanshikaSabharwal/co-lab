@@ -35,7 +35,7 @@ const Notifications = () => {
     <div className="relative flex items-center space-x-4">
       <Link
         href="/notifications"
-        className="text-gray-700 hover:text-blue-600 font-semibold text-lg transition-colors duration-200 hover:scale-105"
+        className="text-white hover:text-blue-600 font-semibold text-lg transition-colors duration-200 hover:scale-105"
         onClick={handleViewNotifications} // Remove count after viewing
       >
         Notifications

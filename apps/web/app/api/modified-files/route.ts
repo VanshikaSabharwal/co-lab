@@ -5,7 +5,7 @@ export async function POST(req: Request) {
   const { name, path, userId, content, group } = await req.json();
   try {
     const modifiedFile = await prisma.modifiedFiles.upsert({
-      where: { userId },
+      where: { id:userId },
       update: {
         content,
         updatedAt: new Date(),

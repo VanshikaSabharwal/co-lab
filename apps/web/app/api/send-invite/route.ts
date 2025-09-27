@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   }
   try {
     // Check if an invite with the same phone number already exists
-    const existingInvite = await prisma.invite.findUnique({
+    const existingInvite = await prisma.invite.findFirst({
       where: { phone: phoneNumber },
     });
 

@@ -13,13 +13,13 @@ export async function POST(req: Request) {
     }
 
     const existingFile = await prisma.file.findUnique({
-      where: { userId },
+      where: { id: userId },
     });
 
     if (existingFile) {
       // Update the existing file and set status to PENDING
       await prisma.file.update({
-        where: { userId },
+        where: { id: userId },
         data: {
           content,
           group,

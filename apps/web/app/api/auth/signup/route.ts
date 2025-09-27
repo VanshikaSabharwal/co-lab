@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "../../../lib/prisma";
 
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { z } from "zod";
 
 // Zod schema for validation
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
       select: {
         id: true,
         email: true,
-        username: true,
+        name: true,
         phone: true,
       },
     });
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     // Create user in the database
     const user = await prisma.user.create({
       data: {
-        username: name,
+        name: name,
         email,
         phone: phone || "", // Ensure phone is an empty string if not provided
         password: hashedPassword,

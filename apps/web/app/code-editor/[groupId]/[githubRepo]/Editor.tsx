@@ -152,7 +152,7 @@ export default function Editor({ github, group }: CodeProps) {
             group,
           }),
         });
-        const data = res.json();
+        // const data = res.json();
 
         if (!res.ok) {
           throw new Error("Failed to save the file");

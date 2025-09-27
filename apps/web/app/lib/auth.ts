@@ -1,140 +1,48 @@
-import prisma from "../lib/prisma";
-import CredentialsProvider from "next-auth/providers/credentials";
-import GitHubProvider from "next-auth/providers/github";
-import { z } from "zod";
-import bcrypt from "bcrypt";
-import { JWT } from "next-auth/jwt";
-import { Session } from "next-auth";
+// apps/web/app/lib/auth.ts
 import { NextAuthOptions } from "next-auth";
+import GitHubProvider from "next-auth/providers/github";
+import GoogleProvider from "next-auth/providers/google";
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
+import prisma from "./prisma";
 
-const credentialsSchema = z.object({
-  name: z
-    .string()
-    .min(1, "Name is required")
-    .max(50, "Name must be less than 50 characters long"),
-  email: z.string().email("Invalid email address").min(1, "Email is required"),
-  password: z
-    .string()
-    .min(6, "Password must be at least 6 characters long")
-    .max(100, "Password must be less than 100 characters long"),
-  phone: z
-    .string()
-    .regex(/^[0-9]{10}$/, "Phone number must be exactly 10 digits")
-    .optional(),
-});
-
-// next auth config
 export const authOptions: NextAuthOptions = {
+  adapter: PrismaAdapter(prisma),
+  
   providers: [
-    CredentialsProvider({
-      name: "Credentials",
-      credentials: {
-        name: {
-          label: "Name",
-          type: "text",
-          placeholder: "Enter your name",
-          required: true,
-        },
-        email: {
-          label: "Email",
-          type: "email",
-          placeholder: "Enter your email",
-          required: true,
-        },
-        phone: {
-          label: "Phone",
-          type: "text",
-          placeholder: "Enter your Number",
-          required: true,
-        },
-        password: {
-          label: "Password",
-          type: "password",
-          placeholder: "Enter your password",
-          required: true,
-        },
-      },
-      async authorize(credentials) {
-        try {
-          if (!credentials) throw new Error("No credentials provided");
-
-          const parsedCredentials = credentialsSchema.safeParse(credentials);
-          if (!parsedCredentials.success)
-            throw new Error("Invalid Credentials");
-
-          const { name, email, phone, password } = parsedCredentials.data;
-
-          const existingUser = await prisma.user.findUnique({
-            where: { email },
-          });
-
-          if (existingUser) {
-            const passwordValidation = await bcrypt.compare(
-              password,
-              existingUser.password
-            );
-            if (!passwordValidation)
-              throw new Error("Incorrect password. Please try again.");
-
-            return {
-              id: existingUser.id.toString(),
-              name: existingUser.username,
-              phone: existingUser.phone || "",
-              email: existingUser.email,
-              image: existingUser.image || "",
-            };
-          }
-
-          const hashedPassword = await bcrypt.hash(password, 10);
-          const newUser = await prisma.user.create({
-            data: {
-              username: name,
-              email,
-              phone: phone || "",
-              password: hashedPassword,
-              image: "",
-            },
-          });
-
-          return {
-            id: newUser.id.toString(),
-            name: newUser.username,
-            phone: newUser.phone || "",
-            email: newUser.email,
-            image: newUser.image || "",
-          };
-        } catch (error) {
-          console.error("Authorization error", error);
-          throw new Error("Internal error");
-        }
-      },
+    GitHubProvider({
+      clientId: process.env.GITHUB_ID!,
+      clientSecret: process.env.GITHUB_SECRET!,
     }),
-
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
   ],
 
-  secret: process.env.JWT_SECRET,
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.email = user.email;
-        token.phone = user.phone;
-        token.name = user.name;
-        token.image = user.image;
-        token.accessToken = user.githubAccessToken; // Ensure this is being set
-      }
-      return token;
-    },
+  secret: process.env.NEXTAUTH_SECRET,
 
-    async session({ token, session }: { token: JWT; session: Session }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-        session.user.phone = token.phone as string;
-        session.user.name = token.name as string;
-        session.user.image = token.image as string;
-        session.user.githubAccessToken = token.accessToken as string; // Include access token
+  // Use JWT strategy instead of database for better compatibility
+  session: {
+    strategy: "jwt",
+  },
+
+  callbacks: {
+    async session({ session, token }) {
+      if (session.user && token.sub) {
+        session.user.id = token.sub;
       }
       return session;
     },
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
+    },
+  },
+
+  pages: {
+    signIn: '/auth/signin',
+    error: '/auth/error',
   },
 };

@@ -6,7 +6,6 @@ import FriendSearch from "../components/FriendSearch";
 import Notifications from "./Notifications";
 import { motion } from "framer-motion";
 import GroupChat from "../group/[groupId]/GroupChat";
-import Cookies from "js-cookie";
 
 interface Group {
   id: string;
@@ -15,39 +14,26 @@ interface Group {
   groupName: string;
   githubRepo: string;
 }
-interface GuestData {
-  guestId: string;
-}
 
 export default function Component() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [selectedChat, setSelectedChat] = useState<Group | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [isMobileView, setIsMobileView] = useState(false);
-  const [guestData, setGuestData] = useState<GuestData | null>(null);
 
-  const user = session?.user?.id;
+  const userId = session?.user?.id;
 
   useEffect(() => {
-    const guestId = Cookies.get("guestId");
-    if (guestId) {
-      setGuestData({ guestId });
-    }
-  }, []);
+    if (!userId) return;
 
-  // Fetch Groups and Handle Responsive Layout
-  useEffect(() => {
     const fetchGroups = async () => {
-      if (session?.user?.id || guestData?.guestId) {
-        // Check for either session or guest
-        try {
-          const res = await fetch(`/api/my-groups?userId=${user}`);
-          const data = await res.json();
-          setGroups(Array.isArray(data.groups) ? data.groups : []);
-        } catch (error) {
-          console.error("Error fetching groups:", error);
-          setGroups([]);
-        }
+      try {
+        const res = await fetch(`/api/my-groups?userId=${userId}`);
+        const data = await res.json();
+        setGroups(Array.isArray(data.groups) ? data.groups : []);
+      } catch (error) {
+        console.error("Error fetching groups:", error);
+        setGroups([]);
       }
     };
     fetchGroups();
@@ -55,24 +41,28 @@ export default function Component() {
     const handleResize = () => {
       setIsMobileView(window.innerWidth <= 768);
     };
-
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [session, user, guestData]);
+  }, [userId]);
 
   const handleGroupClick = (group: Group) => {
     if (isMobileView) {
+      // Optional: use router.push instead of full reload
       window.location.href = `/group/${group.id}`;
     } else {
       setSelectedChat(group);
     }
   };
 
-  if (!session && !guestData) {
+  if (status === "loading") {
+    return <p className="text-center text-gray-400">Loading...</p>;
+  }
+
+  if (!session) {
     return (
       <p className="text-center text-gray-400">
-        Please Sign In or Use Guest Mode to see chats
+        Please Sign In to see chats
       </p>
     );
   }
@@ -85,16 +75,17 @@ export default function Component() {
           <Notifications />
           <div className="text-sm">
             <p>
-              <strong>Email:</strong> {session?.user?.email || "Guest"}
+              <strong>Name:</strong> {session.user?.name || "No Name"}
             </p>
             <p>
-              <strong>Phone:</strong>{" "}
-              {session?.user?.phone || "No phone number"}
+              <strong>Email:</strong> {session.user?.email || "No Email"}
             </p>
           </div>
         </div>
+
         <h1 className="text-2xl font-bold text-gray-300 my-6">Contacts</h1>
         <FriendSearch />
+
         <div className="mt-8">
           <h2 className="text-xl font-semibold text-gray-400 mb-4">
             My Groups:
@@ -118,14 +109,6 @@ export default function Component() {
             ))}
           </ul>
         </div>
-        {/* Guest User Section */}
-        {guestData && (
-          <div className="mt-8 p-4 bg-gray-700 rounded-md">
-            <p className="text-sm text-gray-300">
-              Welcome, Guest! Your ID: <strong>{guestData.guestId}</strong>
-            </p>
-          </div>
-        )}
       </div>
 
       {/* Chat Area */}

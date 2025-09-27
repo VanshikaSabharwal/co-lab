@@ -9,12 +9,12 @@ const Header = () => {
   return (
     <div>
       <Appbar
-        onSignin={signIn}
-        onSignout={async () => {
-          await signOut();
-          router.push("/signup");
-        }}
-        user={session?.data?.user ? session.data.user : null}
+        // onSignin={signIn}
+        // onSignout={async () => {
+        //   await signOut();
+        //   router.push("/signup");
+        // }}
+        // user={session?.data?.user ? session.data.user : null}
       />
     </div>
   );

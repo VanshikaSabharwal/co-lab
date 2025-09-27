@@ -13,7 +13,7 @@ const AddGroupMember: React.FC<AddGroupProps> = ({ groupId }) => {
   const [userExists, setUserExists] = useState<boolean | null>(null);
   const [inviteSent, setInviteSent] = useState(false);
   const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null);
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const [backToGroup, setBackToGroup] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 

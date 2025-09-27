@@ -13,7 +13,7 @@ const ViewGroupMembers: React.FC<ViewMembersProps> = async ({ groupId }) => {
     include: {
       user: {
         select: {
-          username: true,
+          name: true,
           phone: true,
         },
       },
@@ -27,7 +27,7 @@ const ViewGroupMembers: React.FC<ViewMembersProps> = async ({ groupId }) => {
         <ul className="space-y-4 w-full max-w-md">
           {members.map((member) => (
             <li key={member.id} className="p-4 border rounded-lg">
-              <strong>Name:</strong> {member.user.username} <br />
+              <strong>Name:</strong> {member.user.name} <br />
               <strong>Phone:</strong> {member.user.phone} <br />
             </li>
           ))}

@@ -89,7 +89,7 @@ export async function GET(req: Request) {
       const error = await response.json();
       console.error("GitHub API Error: ", error);
       return NextResponse.json(
-        { error: `Failed to fetch GitHub repo: ${error.message}` },
+        { error: `Failed to fetch GitHub repo: ${error}` },
         { status: response.status }
       );
     }

@@ -7,30 +7,81 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// === USER MODEL ===
 model User {
   id                  String          @id @default(cuid())
-  email               String          @unique
-  password            String
-  username            String          @unique
-  phone               String          @unique
-  image               String          @default("default")
+  email               String          @unique // Changed from optional to required
+  name                String?
+  image               String?
+  emailVerified       DateTime?
+
+  // Custom fields
+  phone               String?         @unique
+  password            String?
   chats               Chat[]          @relation("ChatParticipants")
-  sentMessages        Messages[]      @relation("SenderMessages")
-  receivedMessages    Messages[]      @relation("RecipientMessages")
+  sentMessages        Messages[]       @relation("SenderMessages")
+  receivedMessages    Messages[]       @relation("RecipientMessages")
   sentFriendships     Friendship[]    @relation("FriendshipSender")
   receivedFriendships Friendship[]    @relation("FriendshipReceiver")
   ownedGroups         Group[]         @relation("OwnerGroups")
   groupMembers        GroupMember[]   @relation("UserGroups")
-  groupMessages       GroupMessage[] @relation("GroupMessages")
-  userModifiedFiles   ModifiedFiles[] @relation("userModifiedFile")
+  groupMessages       GroupMessage[]  @relation("GroupMessages")
+  userModifiedFiles   ModifiedFiles[]  @relation("userModifiedFile")
+
+  // NextAuth relations
+  accounts            Account[]
+  sessions            Session[]
+
+  // Add timestamps
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 }
 
+// === NEXTAUTH MODELS ===
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String? @db.Text
+  access_token       String? @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String? @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// === CUSTOM MODELS ===
 model Friendship {
   id         String   @id @default(cuid())
   senderId   String
   receiverId String
   status     String   @default("pending")
   createdAt  DateTime @default(now())
+
   sender     User     @relation("FriendshipSender", fields: [senderId], references: [id])
   receiver   User     @relation("FriendshipReceiver", fields: [receiverId], references: [id])
 }
@@ -68,16 +119,17 @@ model Otp {
 }
 
 model Group {
-  id           String          @id @default(cuid())
-  groupName    String
-  githubRepo   String
-  ownerName    String
+  id                String          @id @default(cuid())
+  groupName         String
+  githubRepo        String
+  ownerName         String
   githubAccessToken String
-  ownerId      String
-  createdAt    DateTime        @default(now())
+  ownerId           String
+  createdAt         DateTime        @default(now())
+
   owner        User?           @relation("OwnerGroups", fields: [ownerId], references: [id])
   members      GroupMember[]   @relation("GroupToMembers")
-  groupMessage GroupMessage[] @relation("GroupMessage")
+  groupMessage GroupMessage[]  @relation("GroupMessage")
   modifiedFiles ModifiedFiles[] @relation("modifiedFiles")
 }
 
@@ -95,7 +147,7 @@ model GroupMember {
 
 model Invite {
   id        String   @id @default(cuid())
-  phone     String   @unique
+  phone     String
   groupId   String
   status    String   @default("pending")
   createdAt DateTime
@@ -109,15 +161,16 @@ model GroupMessage {
   senderId   String
   senderName String?
   message    String
- createdAt DateTime @default(now())
-  user       User     @relation("GroupMessages", fields: [senderId], references: [id])
-  group      Group    @relation("GroupMessage", fields: [groupId], references: [id])
+  createdAt  DateTime @default(now())
+
+  user   User  @relation("GroupMessages", fields: [senderId], references: [id])
+  group  Group @relation("GroupMessage", fields: [groupId], references: [id])
 }
 
 model File {
-  id        Int      @id @default(autoincrement())
+  id        Int        @id @default(autoincrement())
   name      String
-  userId    String   @unique
+  userId    String
   path      String   
   content   String   
   ownerId   String   @default("")
@@ -125,34 +178,39 @@ model File {
   updatedAt DateTime @updatedAt
   group     String
   status    FileStatus @default(PENDING) 
+
+  // optional relation if needed
+  // user User @relation(fields: [userId], references: [id])
 }
 
-model ModifiedFiles{
-  id       Int     @id @default(autoincrement())
-  name      String
-  path      String
-  content   String   @db.Text
-  userId    String   @unique
-  changes   Changes[]  @relation("changedFile")
-  groupId   String
+model ModifiedFiles {
+  id         Int          @id @default(autoincrement())
+  name       String
+  path       String
+  content    String       @db.Text
+  userId     String
+  groupId    String
   modifiedById String?
-  modifiedBy  User?     @relation("userModifiedFile",fields: [modifiedById], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  group     Group    @relation("modifiedFiles",fields: [groupId], references: [id])
+
+  changes     Change[]    @relation("changedFile")
+  modifiedBy  User?       @relation("userModifiedFile", fields: [modifiedById], references: [id])
+  group       Group       @relation("modifiedFiles", fields: [groupId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
-model Changes{
-  id        Int      @id @default(autoincrement())
+model Change {
+  id        Int           @id @default(autoincrement())
   fileId    Int
-  file      ModifiedFiles    @relation("changedFile",fields:[fileId],references: [id])
-  type       String
+  file      ModifiedFiles  @relation("changedFile", fields: [fileId], references: [id])
+  type      String
   lineNumber Int
-  content    String
-  createdAt  DateTime  @default(now())
+  content   String
+  createdAt DateTime      @default(now())
 }
 
-model Notifications{
+model Notifications {
   id        String   @id @default(cuid())
   userId    String
   groupId   String
@@ -162,25 +220,27 @@ model Notifications{
   groupName String
   createdAt DateTime @default(now())
 }
-model RejectedCr{
- id        String   @id @default(cuid())
- message   String
- groupId   String
- groupName String
- userId    String
- userName  String
-createdAt  DateTime  @default(now())
+
+model RejectedCr {
+  id        String   @id @default(cuid())
+  message   String
+  groupId   String
+  groupName String
+  userId    String
+  userName  String
+  createdAt DateTime  @default(now())
 }
-model ApprovedCr{
+
+model ApprovedCr {
   id        String   @id @default(cuid())
   message   String
   userId    String
   groupId   String
   groupName String
   userName  String
-  createdAt  DateTime  @default(now())
-
+  createdAt DateTime  @default(now())
 }
+
 model GuestUser {
   id          String       @id @default(cuid())
   guestId     String
@@ -190,28 +250,30 @@ model GuestUser {
 }
 
 model GuestGroup {
-  id        String  @id @default(cuid())
-  groupId   String
-  ownerId   String
-  userId    String
-  user      GuestUser @relation("UserToGuestGroups", fields: [userId], references: [id]) 
+  id      String    @id @default(cuid())
+  groupId String
+  ownerId String
+  userId  String
+
+  user    GuestUser @relation("UserToGuestGroups", fields: [userId], references: [id]) 
 
   @@index([userId])
 }
 
-model Testimonial{
-  id        String   @id @default(cuid())
-  name    String
+model Testimonial {
+  id          String   @id @default(cuid())
+  name        String
   description String
   userId      String? @unique
   createdAt   DateTime @default(now())
 }
+
+// === ENUMS ===
 enum FileStatus {
   PENDING
   APPROVED
   REJECTED
 }
-
 
 enum GroupRole {
   ADMIN

@@ -35,7 +35,6 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const [loadingGroupDetails, setLoadingGroupDetails] = useState(true);
   const [loadingPercentage, setLoadingPercentage] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const githubRepo = groupDetails?.githubRepo;
   const groupName = groupDetails?.groupName;
 
   const senderId = session?.user?.id;
@@ -107,7 +106,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
       // Establish WebSocket connection
       if (!wsRef.current) {
         wsRef.current = new WebSocket(
-          `https://code-co-lab-crew.onrender.com?userId=${senderId}&groupId=${group}`
+          `ws://localhost:8080?userId=${senderId}&groupId=${group}`
         );
 
         // Handle incoming WebSocket messages

@@ -86,10 +86,10 @@ const HeroSection = () => {
   const handleDeleteTestimonial = async (id: string) => {
     try {
       const userId = session?.user?.email || guestData?.guestId;
-      const canDelete = (id: string) =>
-        testimonials.some(
-          (t) => t.id === id && t.userId === session?.user?.email
-        );
+      // const canDelete = (id: string) =>
+      //   testimonials.some(
+      //     (t) => t.id === id && t.userId === session?.user?.email
+      //   );
 
       const response = await fetch("/api/testimonial-card", {
         method: "DELETE",

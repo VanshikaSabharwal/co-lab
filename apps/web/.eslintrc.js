@@ -6,4 +6,8 @@ module.exports = {
   parserOptions: {
     project: true,
   },
+  rules:{
+    "no-unused-vars": "off",
+    "@typescript-no-unused-vars":"off"
+  }
 };

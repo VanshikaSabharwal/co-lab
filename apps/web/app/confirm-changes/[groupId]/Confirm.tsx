@@ -8,7 +8,7 @@ import { java } from "@codemirror/lang-java";
 import { css } from "@codemirror/lang-css";
 import CodeMirror from "@uiw/react-codemirror";
 import toast from "react-hot-toast";
-import { v4 as uuidv4 } from "uuid";
+// import { v4 as uuidv4 } from "uuid";
 import { useSession } from "next-auth/react";
 
 interface GroupProps {
@@ -50,7 +50,7 @@ const Confirm = ({ group }: GroupProps) => {
   const [groupName, setGroupName] = useState("");
   const [commitLink, setCommitLink] = useState("");
   const [commitMessage, setCommitMessage] = useState("");
-  let crUserId: string;
+  // let crUserId: string;
 
   useEffect(() => {
     if (group && userId) {
@@ -133,7 +133,7 @@ const Confirm = ({ group }: GroupProps) => {
   };
 
   const raiseChangeRequest = async () => {
-    const crId = uuidv4();
+    // const crId = uuidv4();
     setLoadingState((prev) => ({ ...prev, changeRequestLoading: true }));
     try {
       const response = await fetch(`/api/change-request?group=${group}`, {
@@ -147,8 +147,8 @@ const Confirm = ({ group }: GroupProps) => {
       if (!response.ok) throw new Error("Failed to raise change request");
 
       // Fetch the userId of the person who raised the CR and store it
-      const crData = await response.json();
-      const crUserId = crData.userId;
+      // const crData = await response.json();
+      // const crUserId = crData.userId;
 
       toast.success("Change request raised successfully!");
     } catch (error) {
