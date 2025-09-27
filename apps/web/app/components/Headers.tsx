@@ -8,14 +8,7 @@ const Header = () => {
   const router = useRouter();
   return (
     <div>
-      <Appbar
-        // onSignin={signIn}
-        // onSignout={async () => {
-        //   await signOut();
-        //   router.push("/signup");
-        // }}
-        // user={session?.data?.user ? session.data.user : null}
-      />
+      <Appbar />
     </div>
   );
 };
