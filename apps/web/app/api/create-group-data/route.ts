@@ -1,72 +1,72 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import crypto from "crypto";
+import { NextResponse } from "next/server"
+import { PrismaClient } from "@prisma/client"
+import crypto from "crypto"
 
 // Initialize Prisma Client
-const prisma = new PrismaClient();
+const prisma = new PrismaClient()
 
 // Use an environment variable for the encryption key in production
 const ENCRYPTION_KEY_HEX =
-  process.env.ENCRYPTION_KEY ||
-  "238d654b1ee39c0663cf2bb6602315cdbc48c322b3a06f50a90e92248468b743";
+  process.env.ENCRYPTION_KEY || "238d654b1ee39c0663cf2bb6602315cdbc48c322b3a06f50a90e92248468b743"
 
 // Convert the hex string into a 32-byte buffer for AES-256 encryption
-const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_HEX, "hex");
-const IV_LENGTH = 16; // AES-256-CBC requires a 16-byte IV
+const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_HEX, "hex")
+const IV_LENGTH = 16 // AES-256-CBC requires a 16-byte IV
 
-// Helper function to encrypt text
 function encrypt(text: string): string {
-  const iv = crypto.randomBytes(IV_LENGTH); // Generate a random Initialization Vector (IV)
-  const cipher = crypto.createCipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
-  let encrypted = cipher.update(text, "utf-8");
-  encrypted = Buffer.concat([encrypted, cipher.final()]);
+  const iv = crypto.randomBytes(IV_LENGTH)
+  const key = ENCRYPTION_KEY as unknown as crypto.CipherKey
 
-  // Return IV and encrypted text as a combined string
-  return iv.toString("hex") + ":" + encrypted.toString("hex");
+  const cipher = crypto.createCipheriv("aes-256-cbc", key, iv as any)
+  let encrypted = cipher.update(text, "utf8", "hex")
+  encrypted += cipher.final("hex")
+
+  return `${iv.toString("hex")}:${encrypted}`
 }
 
-// Helper function to decrypt text
 function decrypt(encryptedText: string): string {
-  const textParts = encryptedText.split(":");
-  const ivHex = textParts.shift(); // Extract IV part
-  const encryptedDataHex = textParts.join(":"); // Join the remaining parts
-
-  // Ensure the IV and encrypted data are defined before proceeding
-  if (!ivHex || !encryptedDataHex) {
-    throw new Error("Invalid encrypted text format");
+  const parts = encryptedText.split(":")
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Error("Invalid encrypted text format")
   }
 
-  const iv = Buffer.from(ivHex, "hex");
-  const encryptedData = Buffer.from(encryptedDataHex, "hex");
+  const [ivHex, encryptedData] = parts
 
-  const decipher = crypto.createDecipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
-  let decrypted = decipher.update(encryptedData);
-  decrypted = Buffer.concat([decrypted, decipher.final()]);
+  const iv = Buffer.from(ivHex, "hex")
+  const key = ENCRYPTION_KEY as unknown as crypto.CipherKey
 
-  return decrypted.toString("utf-8");
+  const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv as any)
+  let decrypted = decipher.update(encryptedData, "hex", "utf8")
+  decrypted += decipher.final("utf8")
+
+  return decrypted
 }
 
 export async function POST(req: Request) {
   try {
-    const {
+    const { groupName, githubRepo, githubOwnerName, githubAccessToken, sshKey, ownerId } = await req.json()
+
+    console.log("📩 Incoming Body:", {
       groupName,
       githubRepo,
       githubOwnerName,
-      githubAccessToken,
+      githubAccessTokenLength: githubAccessToken?.length,
       ownerId,
-    } = await req.json();
+      sshKeyLength: sshKey?.length
+    })
 
-    if (!groupName || !githubRepo || !githubAccessToken || !ownerId) {
-      return NextResponse.json(
-        {
-          error:
-            "Group name, GitHub repo URL, GitHub access token, and owner ID are required",
-        },
-        { status: 400 }
-      );
-    }
+    if (!groupName)
+      return NextResponse.json({ error: "Group name is required" }, { status: 400 })
 
-    // Check if the group already exists in the database
+    if (!githubRepo)
+      return NextResponse.json({ error: "GitHub repo is required" }, { status: 400 })
+
+    if (!githubAccessToken)
+      return NextResponse.json({ error: "GitHub access token is required" }, { status: 400 })
+
+    if (!ownerId)
+      return NextResponse.json({ error: "Owner ID is required" }, { status: 400 })
+
     const groupExists = await prisma.group.findFirst({
       where: {
         ownerId,
@@ -74,83 +74,88 @@ export async function POST(req: Request) {
         githubRepo,
         groupName,
       },
-    });
+    })
 
     if (groupExists) {
       return NextResponse.json(
-        {
-          error:
-            "A group with the same owner, group name, and GitHub repo already exists.",
-        },
-        { status: 409 }
-      );
+        { error: "Group already exists!" },
+        { status: 409 },
+      )
     }
 
-    // Encrypt the GitHub access token before storing it in the database
-    const encryptedAccessToken = encrypt(githubAccessToken);
+    const encryptedAccessToken = encrypt(githubAccessToken)
+    const encryptedSshKey = sshKey ? encrypt(sshKey) : null
 
-    // Create a new group and store it in the database
+    console.log("➡️ Data being saved in DB:", {
+      groupName,
+      githubRepo,
+      ownerName: githubOwnerName,
+      ownerId,
+      encryptedSshKeyPresent: !!encryptedSshKey,
+      encryptedAccessTokenPresent: !!encryptedAccessToken
+    })
+
     const group = await prisma.group.create({
       data: {
         groupName,
         githubRepo,
         ownerName: githubOwnerName,
         githubAccessToken: encryptedAccessToken,
+        sshKey: encryptedSshKey,
         ownerId,
       },
-    });
+    })
 
-    return NextResponse.json(group, { status: 201 });
-  } catch (err) {
-    console.error("Error while creating group:", err);
+    return NextResponse.json(group, { status: 201 })
+  } catch (err: any) {
+    console.error("🔥 ERROR IN CREATE-GROUP API");
+    console.error("Message:", err.message);
+    console.error("Stack:", err.stack);
+
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: err.message ?? "Internal Server Error" },
       { status: 500 }
-    );
+    )
   } finally {
-    await prisma.$disconnect();
+    await prisma.$disconnect()
   }
 }
 
+
 export async function GET(req: Request) {
   try {
-    const url = new URL(req.url);
-    const groupId = url.searchParams.get("group");
+    const url = new URL(req.url)
+    const groupId = url.searchParams.get("group")
 
     if (!groupId) {
-      return NextResponse.json(
-        { error: "Group ID parameter is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Group ID parameter is required" }, { status: 400 })
     }
 
     // Fetch the group details by group ID
     const groupDetails = await prisma.group.findUnique({
       where: { id: groupId },
-    });
+    })
 
     if (!groupDetails) {
-      return NextResponse.json(
-        { error: `Group with ID ${groupId} not found` },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: `Group with ID ${groupId} not found` }, { status: 404 })
     }
 
-    // Decrypt the GitHub access token before sending it back
-    const decryptedAccessToken = decrypt(groupDetails.githubAccessToken);
+    const decryptedAccessToken = decrypt(groupDetails.githubAccessToken)
+    const decryptedSshKey = groupDetails.sshKey ? decrypt(groupDetails.sshKey) : null
 
-    // Return the group details, including the decrypted access token
+    // Return the group details, including the decrypted tokens
     return NextResponse.json(
-      { ...groupDetails, githubAccessToken: decryptedAccessToken },
-      { status: 200 }
-    );
+      {
+        ...groupDetails,
+        githubAccessToken: decryptedAccessToken,
+        sshKey: decryptedSshKey,
+      },
+      { status: 200 },
+    )
   } catch (err) {
-    console.error("Error fetching group:", err);
-    return NextResponse.json(
-      { error: "Failed to fetch group data" },
-      { status: 500 }
-    );
+    console.error("Error fetching group:", err)
+    return NextResponse.json({ error: "Failed to fetch group data" }, { status: 500 })
   } finally {
-    await prisma.$disconnect();
+    await prisma.$disconnect()
   }
 }

@@ -17,26 +17,27 @@ const ENCRYPTION_KEY_HEX =
 
 // Convert the hex string into a 32-byte buffer for AES-256 encryption
 const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_HEX, "hex");
+const IV_LENGTH = 16; // AES-256-CBC requires a 16-byte IV
 
+// Fixed decrypt function matching your working reference
 function decrypt(encryptedText: string): string {
-  const textParts = encryptedText.split(":");
-  const ivHex = textParts.shift(); // Extract IV part
-  const encryptedDataHex = textParts.join(":"); // Join the remaining parts
-
-  // Ensure the IV and encrypted data are defined before proceeding
-  if (!ivHex || !encryptedDataHex) {
+  const parts = encryptedText.split(":");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
     throw new Error("Invalid encrypted text format");
   }
 
+  const [ivHex, encryptedData] = parts;
+
   const iv = Buffer.from(ivHex, "hex");
-  const encryptedData = Buffer.from(encryptedDataHex, "hex");
+  const key = ENCRYPTION_KEY as unknown as crypto.CipherKey;
 
-  const decipher = crypto.createDecipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
-  let decrypted = decipher.update(encryptedData);
-  decrypted = Buffer.concat([decrypted, decipher.final()]);
+  const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv as any);
+  let decrypted = decipher.update(encryptedData, "hex", "utf8");
+  decrypted += decipher.final("utf8");
 
-  return decrypted.toString("utf-8");
+  return decrypted;
 }
+
 export async function POST(req: NextRequest) {
   try {
     const { userId, modifiedFiles, groupId, message } = await req.json();
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
         userId: true,
         group: {
           select: {
-            groupName: true,
+            githubRepo: true,
             ownerName: true,
             ownerId: true,
             githubAccessToken: true,
@@ -151,7 +152,7 @@ export async function POST(req: NextRequest) {
     // Step 1: Get the latest SHA for the default branch (main)
     const { data } = await octokit.rest.repos.getBranch({
       owner: groupDetails.group.ownerName,
-      repo: groupDetails.group.groupName,
+      repo: groupDetails.group.githubRepo,
       branch: "main",
     });
 
@@ -167,7 +168,7 @@ export async function POST(req: NextRequest) {
 
     const { data: newTree } = await octokit.rest.git.createTree({
       owner: groupDetails.group.ownerName,
-      repo: groupDetails.group.groupName,
+      repo: groupDetails.group.githubRepo,
       tree: treeEntries,
       base_tree: baseTreeSha,
     });
@@ -176,7 +177,7 @@ export async function POST(req: NextRequest) {
     // const commitMessage = "Updated files";
     const { data: commit } = await octokit.rest.git.createCommit({
       owner: groupDetails.group.ownerName,
-      repo: groupDetails.group.groupName,
+      repo: groupDetails.group.githubRepo,
       message: message,
       tree: newTree.sha,
       parents: [baseTreeSha],
@@ -185,12 +186,12 @@ export async function POST(req: NextRequest) {
     // Step 4: Update the default branch with the new commit
     await octokit.rest.git.updateRef({
       owner: groupDetails.group.ownerName,
-      repo: groupDetails.group.groupName,
+      repo: groupDetails.group.githubRepo,
       ref: "heads/main",
       sha: commit.sha,
     });
 
-    const commitUrl = `https://github.com/${groupDetails.group.ownerName}/${groupDetails.group.groupName}/commit/${commit.sha}`;
+    const commitUrl = `https://github.com/${groupDetails.group.ownerName}/${groupDetails.group.githubRepo}/commit/${commit.sha}`;
 
     return NextResponse.json(
       { message: "Changes committed successfully!", commitUrl },

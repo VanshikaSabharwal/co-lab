@@ -124,6 +124,7 @@ model Group {
   githubRepo        String
   ownerName         String
   githubAccessToken String
+  sshKey            String?
   ownerId           String
   createdAt         DateTime        @default(now())
 
@@ -198,6 +199,8 @@ model ModifiedFiles {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@unique([userId, groupId], name: "userId_groupId")
 }
 
 model Change {

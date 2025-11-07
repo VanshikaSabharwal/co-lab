@@ -29,7 +29,9 @@ export async function POST(req: Request) {
 
     const ownerId = groupData.ownerId;
     const ownerName = groupData.ownerName;
-    const groupName = groupData.groupName;
+    console.log("ownerName", ownerName);
+    const groupName = groupData.githubRepo;
+    console.log("groupName", groupName);
 
     // Create a notification for the owner
     const notification = await prisma.notifications.create({

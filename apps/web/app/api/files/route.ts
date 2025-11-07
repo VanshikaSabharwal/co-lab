@@ -9,26 +9,27 @@ const prisma = new PrismaClient();
 const ENCRYPTION_KEY_HEX =
   process.env.ENCRYPTION_KEY ||
   "238d654b1ee39c0663cf2bb6602315cdbc48c322b3a06f50a90e92248468b743";
+
 const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_HEX, "hex");
+const IV_LENGTH = 16;
 
-// Helper function to decrypt the GitHub access token
+// Updated decrypt function to match the working version
 function decrypt(encryptedText: string): string {
-  const textParts = encryptedText.split(":");
-  const ivHex = textParts.shift();
-  const encryptedDataHex = textParts.join(":");
-
-  if (!ivHex || !encryptedDataHex) {
+  const parts = encryptedText.split(":");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
     throw new Error("Invalid encrypted text format");
   }
 
+  const [ivHex, encryptedData] = parts;
+
   const iv = Buffer.from(ivHex, "hex");
-  const encryptedData = Buffer.from(encryptedDataHex, "hex");
+  const key = ENCRYPTION_KEY as unknown as crypto.CipherKey;
 
-  const decipher = crypto.createDecipheriv("aes-256-cbc", ENCRYPTION_KEY, iv);
-  let decrypted = decipher.update(encryptedData);
-  decrypted = Buffer.concat([decrypted, decipher.final()]);
+  const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv as any);
+  let decrypted = decipher.update(encryptedData, "hex", "utf8");
+  decrypted += decipher.final("utf8");
 
-  return decrypted.toString("utf-8");
+  return decrypted;
 }
 
 export async function GET(req: Request) {
@@ -46,12 +47,11 @@ export async function GET(req: Request) {
     // Retrieve the group details from the database
     const groupDetails = await prisma.group.findUnique({
       where: { id: groupId },
-      select: {
-        groupName: true,
-        ownerName: true,
-        ownerId: true,
-        githubAccessToken: true,
-      },
+select: {
+  githubRepo: true,     // <-- FETCH ACTUAL REPO NAME
+  ownerName: true,
+  githubAccessToken: true,
+},
     });
 
     // Check if the group exists
@@ -62,9 +62,9 @@ export async function GET(req: Request) {
       );
     }
 
-    const { groupName, ownerName, githubAccessToken } = groupDetails;
+    const { githubRepo, ownerName, githubAccessToken } = groupDetails;
 
-    if (!groupName || !ownerName || !githubAccessToken) {
+    if (!githubRepo || !ownerName || !githubAccessToken) {
       return NextResponse.json(
         {
           error:
@@ -76,8 +76,8 @@ export async function GET(req: Request) {
 
     const decryptedAccessToken = decrypt(githubAccessToken);
 
-    const githubApiUrl = `https://api.github.com/repos/${ownerName}/${groupName}/contents`;
-
+    const githubApiUrl = `https://api.github.com/repos/${ownerName}/${githubRepo}/contents`;
+    console.log('githubApiUrl', githubApiUrl)
     const response = await fetch(githubApiUrl, {
       headers: {
         Authorization: `token ${decryptedAccessToken}`,
@@ -95,7 +95,6 @@ export async function GET(req: Request) {
     }
 
     const repoContents = await response.json();
-
     return NextResponse.json(repoContents, { status: 200 });
   } catch (err) {
     console.error("Error fetching group or GitHub repo: ", err);

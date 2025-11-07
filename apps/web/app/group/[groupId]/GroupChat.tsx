@@ -35,8 +35,10 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const [loadingGroupDetails, setLoadingGroupDetails] = useState(true);
   const [loadingPercentage, setLoadingPercentage] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // const githubRepo = groupDetails?.githubRepo;
   const groupName = groupDetails?.groupName;
+  const githubRepo = groupDetails?.githubRepo;
+  console.log('groupDetails', groupDetails)
+  console.log('groupName', groupName);
 
   const senderId = session?.user?.id;
   const senderName = session?.user?.name;
@@ -236,7 +238,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
             <h2 className="text-xs sm:text-sm text-center mt-1">
               Group ID: {group}
             </h2>
-            <Link href={`/code-editor/${group}/${groupName}`}>
+            <Link href={`/code-editor/${group}/${githubRepo}`}>
               <button className="mt-2 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition duration-300">
                 Code Editor
               </button>

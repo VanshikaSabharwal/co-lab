@@ -163,7 +163,7 @@ const HeroSection = () => {
 
             {/* Make a Group Button */}
             <Link
-              href="/create-group"
+              href="/github"
               className="px-8 py-4 bg-gray-800 text-white rounded-full text-lg font-semibold transition-all duration-300 shadow-lg hover:shadow-purple-500/20 hover:-translate-y-1 active:translate-y-0 active:shadow-lg border border-gray-700 hover:border-purple-400"
             >
               Create a Group

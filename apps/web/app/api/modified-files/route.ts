@@ -5,22 +5,29 @@ export async function POST(req: Request) {
   const { name, path, userId, content, group } = await req.json();
   try {
     const modifiedFile = await prisma.modifiedFiles.upsert({
-      where: { id:userId },
-      update: {
-        content,
-        updatedAt: new Date(),
-        userId,
-        groupId: group,
-      },
-      create: {
-        name,
-        path,
-        content,
-        userId,
-        modifiedById: userId,
-        groupId: group,
-      },
-    });
+  where: {
+    userId_groupId: {
+      userId,
+      groupId: group,
+    },
+  },
+  update: {
+    content,
+    updatedAt: new Date(),
+    modifiedById: userId,
+  },
+  create: {
+    name,
+    path,
+    content,
+    userId,
+    modifiedById: userId,
+    groupId: group,
+  },
+});
+
+
+    
     return NextResponse.json(modifiedFile, { status: 200 });
   } catch (error) {
     console.error("Error saving file: ", error);

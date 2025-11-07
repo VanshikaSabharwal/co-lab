@@ -81,7 +81,7 @@ const Confirm = ({ group }: GroupProps) => {
           setModifiedFiles(modifiedData ? [modifiedData] : []);
           setGroupOwnerId(groupData.ownerId);
           setGroupOwnerName(groupData.ownerName);
-          setGroupName(groupData.groupName);
+          setGroupName(groupData.githubRepo);
 
           if (githubData.length > 0) {
             await loadFileContent(githubData[0].name);
