@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from "uuid";
 import Footer from "@repo/ui/footer";
 import Cookies from "js-cookie";
 import toast from "react-hot-toast";
+import demoTestimonal from "../../../../data/demo-testimonial.json";
 
 interface GuestData {
   guestId: string;
@@ -38,10 +39,13 @@ const HeroSection = () => {
     const fetchTestimonials = async () => {
       try {
         const response = await fetch("/api/testimonial-card");
+        let data: typeof demoTestimonal = [];
+
         if (response.ok) {
           const data = await response.json();
-          setTestimonials(data);
+          // setTestimonials(data);  uncomment this when don't want to use demo testimonials -> only real testimonials will show on screen if uncommented fetched from DB
         }
+        setTestimonials([...demoTestimonal, ...data]);
       } catch (err) {
         console.error("Failed to fetch testimonials:", err);
       }
@@ -72,7 +76,7 @@ const HeroSection = () => {
         setInputName("");
         setInputDescription("");
         toast.success(
-          "Your response has been added to the Testimonials section. Thanks for your feedback!"
+          "Your response has been added to the Testimonials section. Thanks for your feedback!",
         );
       } else {
         const errorData = await response.json();
@@ -99,7 +103,7 @@ const HeroSection = () => {
 
       if (response.ok) {
         setTestimonials((prev) =>
-          prev.filter((testimonial) => testimonial.id !== id)
+          prev.filter((testimonial) => testimonial.id !== id),
         );
         toast.success("Testimonial deleted successfully.");
       } else {

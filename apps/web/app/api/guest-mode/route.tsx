@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   if (!guestId) {
     return NextResponse.json(
       { message: "Guest ID is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     console.error("Error creating guest:", err);
     return NextResponse.json(
       { message: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
   if (!guestId) {
     return NextResponse.json(
       { message: "Guest ID is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     console.error("Error retrieving guest:", err);
     return NextResponse.json(
       { message: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

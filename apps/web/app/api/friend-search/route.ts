@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.email) {
       return NextResponse.json(
         { message: "Not authenticated" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -23,13 +23,16 @@ export async function POST(req: NextRequest) {
     if (!currentUser?.phone) {
       return NextResponse.json(
         { requiresPhone: true, message: "Add your phone number first" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const { phone } = await req.json();
     if (!phone) {
-      return NextResponse.json({ message: "Friend phone is required" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Friend phone is required" },
+        { status: 400 },
+      );
     }
 
     // ✅ Find friend by phone
@@ -38,20 +41,19 @@ export async function POST(req: NextRequest) {
       select: { name: true, phone: true },
     });
 
-
     if (existingFriend) {
       return NextResponse.json(existingFriend);
     } else {
       return NextResponse.json(
-        { message: "Friend does not exist on Ko-lab. Please ask him to join Ko-lab" },
-        { status: 404 }
+        {
+          message:
+            "Friend does not exist on Ko-lab. Please ask him to join Ko-lab",
+        },
+        { status: 404 },
       );
     }
   } catch (error) {
     console.error("Error occurred:", error);
-    return NextResponse.json(
-      { message: "An error occurred" },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: "An error occurred" }, { status: 500 });
   }
 }

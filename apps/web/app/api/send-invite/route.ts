@@ -6,7 +6,7 @@ export async function POST(req: Request) {
   if (!phoneNumber) {
     return NextResponse.json(
       { error: "Phone number is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
   try {
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     if (existingInvite) {
       return NextResponse.json(
         { error: "Invite with this phone number already exists." },
-        { status: 400 }
+        { status: 400 },
       );
     } else {
       const invite = await prisma.invite.create({
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     console.error("Error sending invite:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

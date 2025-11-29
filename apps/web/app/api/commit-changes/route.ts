@@ -6,7 +6,7 @@ import crypto from "crypto";
 export async function GET() {
   return NextResponse.json(
     { message: "Method not allowed. Use POST to commit changes." },
-    { status: 405 }
+    { status: 405 },
   );
 }
 
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     if (!userId || !modifiedFiles || !groupId || !message) {
       return NextResponse.json(
         { message: "Missing required parameters" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     if (!groupDetails) {
       return NextResponse.json(
         { error: "No modified file found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -82,12 +82,12 @@ export async function POST(req: NextRequest) {
     ) {
       return NextResponse.json(
         { error: "Invalid GitHub token for the group." },
-        { status: 401 }
+        { status: 401 },
       );
     }
     console.log(
       "GitHub Access Token:",
-      decrypt(groupDetails.group.githubAccessToken)
+      decrypt(groupDetails.group.githubAccessToken),
     );
 
     // Initialize Octokit with Authorization header
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
           {
             error: "The GitHub token does not have the required 'repo' scope.",
           },
-          { status: 403 }
+          { status: 403 },
         );
       }
     } catch (error: unknown) {
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
               "GitHub authentication failed. Please check your access token.",
             details: error.message,
           },
-          { status: 401 }
+          { status: 401 },
         );
       }
 
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
             "GitHub authentication failed. Please check your access token.",
           details: "An unknown error occurred.",
         },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -195,7 +195,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       { message: "Changes committed successfully!", commitUrl },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     console.error("Error committing changes:", error);
@@ -203,13 +203,13 @@ export async function POST(req: NextRequest) {
     if (error instanceof Error) {
       return NextResponse.json(
         { error: `Failed to commit changes: ${error.message}` },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     return NextResponse.json(
       { error: "An unexpected error occurred while committing changes." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

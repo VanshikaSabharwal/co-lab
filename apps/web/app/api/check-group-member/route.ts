@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   if (!group || !userId) {
     return new Response(
       JSON.stringify({ error: "Invalid request parameters." }),
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
 
     // Check if the user is a member of the group
     const isMember = groupExists.members.some(
-      (member) => member.userId === userId
+      (member) => member.userId === userId,
     );
 
     // Return true or false based on membership

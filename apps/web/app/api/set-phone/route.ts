@@ -8,7 +8,10 @@ export async function POST(req: NextRequest) {
     const { phone } = await req.json();
 
     if (!phone) {
-      return NextResponse.json({ message: "Phone is required" }, { status: 400 });
+      return NextResponse.json(
+        { message: "Phone is required" },
+        { status: 400 },
+      );
     }
 
     //     Get current session
@@ -28,7 +31,7 @@ export async function POST(req: NextRequest) {
     console.error("Error updating phone:", err);
     return NextResponse.json(
       { message: "Failed to update phone" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

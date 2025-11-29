@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     if (!name || !path || !content || !group || !userId) {
       return NextResponse.json(
         { error: "File name, path, content, group, and userId are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       });
       return NextResponse.json(
         { message: "File updated successfully" },
-        { status: 200 }
+        { status: 200 },
       );
     } else {
       // Create a new file and set status to PENDING
@@ -46,14 +46,14 @@ export async function POST(req: Request) {
       });
       return NextResponse.json(
         { message: "File saved successfully" },
-        { status: 200 }
+        { status: 200 },
       );
     }
   } catch (error) {
     console.error("Error while saving code files: ", error);
     return NextResponse.json(
       { error: "Error while saving code files" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -66,7 +66,7 @@ export async function GET(req: Request) {
   if (!userId || !group) {
     return NextResponse.json(
       { error: "Both userId and group are required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -106,7 +106,7 @@ export async function GET(req: Request) {
     console.error("Error fetching updated files: ", error);
     return NextResponse.json(
       { error: "Failed to fetch updated files" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

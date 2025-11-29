@@ -52,7 +52,7 @@ const FriendSearch = () => {
       }
 
       const data = await response.json();
-      console.log("data",data)
+      console.log("data", data);
       setFriend(data);
       setError(null);
     } catch (err) {

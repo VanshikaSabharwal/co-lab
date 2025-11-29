@@ -74,7 +74,7 @@ export default function CreateGroup() {
         setGithubOwnerName("");
         setGithubAccessToken("");
         toast.success(
-          `Group "${newGroup.groupName}" created successfully with ID: ${newGroup.id}`
+          `Group "${newGroup.groupName}" created successfully with ID: ${newGroup.id}`,
         );
       } else {
         const errorData = await response.json();
@@ -91,7 +91,7 @@ export default function CreateGroup() {
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => void,
     placeholder: string,
     icon: React.ReactNode,
-    imageSrc: string
+    imageSrc: string,
   ) => (
     <div className="mb-6">
       <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
@@ -142,7 +142,7 @@ export default function CreateGroup() {
             (e) => setGroupName(e.target.value),
             "Enter group name",
             <FaLink className="ml-2" />,
-            "/images/Github-1.png"
+            "/images/Github-1.png",
           )}
           {renderInput(
             "GitHub Repository URL:",
@@ -150,7 +150,7 @@ export default function CreateGroup() {
             (e) => setGithubRepo(e.target.value),
             "Enter GitHub repository URL",
             <FaGithub className="ml-2" />,
-            "/images/Github-1.png"
+            "/images/Github-1.png",
           )}
           {renderInput(
             "GitHub Owner Name:",
@@ -158,7 +158,7 @@ export default function CreateGroup() {
             (e) => setGithubOwnerName(e.target.value),
             "Enter GitHub owner name",
             <FaUser className="ml-2" />,
-            "/images/Github-2.png"
+            "/images/Github-2.png",
           )}
           {renderInput(
             "GitHub Access Token:",
@@ -166,7 +166,7 @@ export default function CreateGroup() {
             (e) => setGithubAccessToken(e.target.value),
             "Enter GitHub access token",
             null,
-            "/images/Github-3.png"
+            "/images/Github-3.png",
           )}
 
           <button

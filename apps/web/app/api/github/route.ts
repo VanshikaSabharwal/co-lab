@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   if (!token || !token.accessToken) {
     return NextResponse.json(
       { error: "Missing or invalid access token" },
-      { status: 401 }
+      { status: 401 },
     );
   }
 
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     if (!userResponse.ok) {
       return NextResponse.json(
         { error: `GitHub API error fetching user: ${userResponse.statusText}` },
-        { status: userResponse.status }
+        { status: userResponse.status },
       );
     }
 
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
         {
           error: `GitHub API error fetching repos: ${reposResponse.statusText}`,
         },
-        { status: reposResponse.status }
+        { status: reposResponse.status },
       );
     }
 
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     console.error("Error fetching from GitHub API:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

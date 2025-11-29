@@ -39,7 +39,7 @@ export async function GET(req: Request) {
   if (!groupId) {
     return NextResponse.json(
       { error: "Group ID is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -47,18 +47,18 @@ export async function GET(req: Request) {
     // Retrieve the group details from the database
     const groupDetails = await prisma.group.findUnique({
       where: { id: groupId },
-select: {
-  githubRepo: true,     // <-- FETCH ACTUAL REPO NAME
-  ownerName: true,
-  githubAccessToken: true,
-},
+      select: {
+        githubRepo: true, // <-- FETCH ACTUAL REPO NAME
+        ownerName: true,
+        githubAccessToken: true,
+      },
     });
 
     // Check if the group exists
     if (!groupDetails) {
       return NextResponse.json(
         { error: `Group with ID ${groupId} not found` },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -70,14 +70,14 @@ select: {
           error:
             "GitHub repository URL, owner name, or access token is missing",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const decryptedAccessToken = decrypt(githubAccessToken);
 
     const githubApiUrl = `https://api.github.com/repos/${ownerName}/${githubRepo}/contents`;
-    console.log('githubApiUrl', githubApiUrl)
+    console.log("githubApiUrl", githubApiUrl);
     const response = await fetch(githubApiUrl, {
       headers: {
         Authorization: `token ${decryptedAccessToken}`,
@@ -90,7 +90,7 @@ select: {
       console.error("GitHub API Error: ", error);
       return NextResponse.json(
         { error: `Failed to fetch GitHub repo: ${error}` },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -100,7 +100,7 @@ select: {
     console.error("Error fetching group or GitHub repo: ", err);
     return NextResponse.json(
       { error: "Failed to fetch group or GitHub repository" },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     await prisma.$disconnect();

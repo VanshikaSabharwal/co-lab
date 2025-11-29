@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json(
         { error: parsed.error.errors }, // Return detailed validation errors
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     if (otp && !phone) {
       return NextResponse.json(
         { error: "Phone number is required for OTP verification" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       if (!storedOtp || storedOtp.expiresAt < new Date()) {
         return NextResponse.json(
           { error: "Invalid or expired OTP" },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
     if (existingUser) {
       return NextResponse.json(
         { error: "User already exists" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -105,13 +105,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       { message: "User created successfully", user },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (err) {
     console.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

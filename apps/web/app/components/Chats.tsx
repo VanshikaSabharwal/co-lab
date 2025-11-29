@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 import GroupChat from "../group/[groupId]/GroupChat";
 
 interface Group {
+  ownerName: string;
   id: string;
   name: string;
   members: Array<{ userId: string }>;
@@ -22,6 +23,7 @@ export default function Component() {
   const [isMobileView, setIsMobileView] = useState(false);
 
   const userId = session?.user?.id;
+  console.log("groups", groups);
 
   useEffect(() => {
     if (!userId) return;
@@ -61,9 +63,7 @@ export default function Component() {
 
   if (!session) {
     return (
-      <p className="text-center text-gray-400">
-        Please Sign In to see chats
-      </p>
+      <p className="text-center text-gray-400">Please Sign In to see chats</p>
     );
   }
 
@@ -99,7 +99,7 @@ export default function Component() {
               >
                 <strong>Group Name:</strong> {group.groupName} <br />
                 <a
-                  href={group.githubRepo}
+                  href={`https://github.com/${group.ownerName}/${group.githubRepo}`}
                   className="text-blue-400 underline hover:text-blue-500"
                   onClick={(e) => e.stopPropagation()}
                 >

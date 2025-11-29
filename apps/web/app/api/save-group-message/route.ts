@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     console.error("Error in POST function:", error);
     return NextResponse.json(
       { error: "Failed to save message" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -72,7 +72,7 @@ export async function GET(req: Request) {
     console.error("Error retrieving messages:", error);
     return NextResponse.json(
       { error: "Failed to retrieve messages" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

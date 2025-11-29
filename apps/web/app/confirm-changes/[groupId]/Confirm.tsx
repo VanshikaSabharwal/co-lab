@@ -39,7 +39,7 @@ const Confirm = ({ group }: GroupProps) => {
   });
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [selectedSection, setSelectedSection] = useState<"github" | "modified">(
-    "github"
+    "github",
   );
 
   const { data: session } = useSession();
@@ -72,7 +72,7 @@ const Confirm = ({ group }: GroupProps) => {
           // Fetch modified files using the new GET endpoint
           const modifiedRes = await fetch(
             `/api/modified-files?group=${group}&userId=${userId}`,
-            { method: "GET" }
+            { method: "GET" },
           );
           if (!modifiedRes) throw new Error("Failed to fetch modified files: ");
 

@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   if (!userId) {
     return NextResponse.json(
       { error: "User ID is required!" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -28,13 +28,13 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(
       { success: true, rejectedNotification: rejectedNotifications },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     console.error("Error fetching rejected CR notifications:", error);
     return NextResponse.json(
       { error: "Error fetching rejected CR notifications!" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   if (!message || !userId || !groupId || !userName || !groupName) {
     return NextResponse.json(
       { error: "All fields are required!" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     console.error("Error creating rejected CR notification:", error);
     return NextResponse.json(
       { error: "Error creating rejected CR notification!" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

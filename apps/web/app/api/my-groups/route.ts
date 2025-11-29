@@ -8,7 +8,7 @@ export async function GET(req: Request) {
   if (!userId) {
     return NextResponse.json(
       { error: "No User Id provided." },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
     if (!groups.length) {
       return NextResponse.json(
         { message: "No groups found for this user." },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -43,7 +43,7 @@ export async function GET(req: Request) {
     console.error("Error checking group membership:", error);
     return NextResponse.json(
       { error: "Internal server error." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

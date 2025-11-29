@@ -24,7 +24,7 @@ interface Message {
 
 const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
   const { data: session, status } = useSession();
-  console.log(session)
+  console.log(session);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isConnected, setIsConnected] = useState(false);
@@ -32,49 +32,50 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
   // const chatId = [session?.user?.phone, phone].sort().join("-");
   const [chatId, setChatId] = useState("");
   const [userId, setUserId] = useState("");
-  console.log(userId)
+  console.log(userId);
   const router = useRouter();
   const [guestData, setGuestData] = useState<GuestData | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
 
-
   useEffect(() => {
-  const fetchUserPhone = async () => {
-    if (session?.user?.email) {
-      try {
-        const res = await fetch(`/api/get-user-number?email=${session.user.email}`);
-        const data = await res.json();
-        if (res.ok) {
-          setUserId(data.phone || "");
-          setChatId([data.phone, phone].sort().join("-"));
-        } else {
-          console.error("Failed to fetch phone:", data.error);
+    const fetchUserPhone = async () => {
+      if (session?.user?.email) {
+        try {
+          const res = await fetch(
+            `/api/get-user-number?email=${session.user.email}`,
+          );
+          const data = await res.json();
+          if (res.ok) {
+            setUserId(data.phone || "");
+            setChatId([data.phone, phone].sort().join("-"));
+          } else {
+            console.error("Failed to fetch phone:", data.error);
+          }
+        } catch (err) {
+          console.error("Error fetching phone:", err);
         }
-      } catch (err) {
-        console.error("Error fetching phone:", err);
       }
+    };
+
+    if (status === "authenticated") {
+      fetchUserPhone();
     }
+  }, [status, session?.user?.email, phone]);
+
+  // Get WebSocket URL based on environment
+  const getWebSocketUrl = () => {
+    if (!userId) return "";
+
+    // For development: connect directly to WebSocket server on port 8080
+    if (process.env.NODE_ENV === "development") {
+      return `ws://localhost:8080/ws?userId=${userId}`;
+    } else if (process.env.NODE_ENV === "production") {
+      return `wss://ko-lab.onrender.com/ws?userId=${userId}`;
+    }
+
+    // For production: use the same host but different path
+    return `wss://ko-lab.onrender.com/ws?userId=${userId}`;
   };
-
-  if (status === "authenticated") {
-    fetchUserPhone();
-  }
-}, [status, session?.user?.email, phone]);
-
-// Get WebSocket URL based on environment
-const getWebSocketUrl = () => {
-  if (!userId) return "";
-  
-  // For development: connect directly to WebSocket server on port 8080
-  if (process.env.NODE_ENV === 'development') {
-    return `ws://localhost:8080/ws?userId=${userId}`;
-  }else if(process.env.NODE_ENV === 'production'){
- return `wss://ko-lab.onrender.com/ws?userId=${userId}`
-  }
-  
-  // For production: use the same host but different path
- return `wss://ko-lab.onrender.com/ws?userId=${userId}`
-};
 
   useEffect(() => {
     const guestId = Cookies.get("guestId");
@@ -98,67 +99,66 @@ const getWebSocketUrl = () => {
   }, [messages, chatId]);
 
   useEffect(() => {
-  if (!userId) return; 
-      const connectWebSocket = () => {
-        try {
-          const wsUrl = getWebSocketUrl();
-          console.log("🔗 Connecting to WebSocket:", wsUrl);
-          
-          const ws = new WebSocket(wsUrl);
-          wsRef.current = ws;
+    if (!userId) return;
+    const connectWebSocket = () => {
+      try {
+        const wsUrl = getWebSocketUrl();
+        console.log("🔗 Connecting to WebSocket:", wsUrl);
 
-          ws.onopen = () => {
-            console.log("✅ WebSocket connected successfully");
-            setIsConnected(true);
-          };
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
 
-          ws.onmessage = async (event) => {
-            try {
-              const message = await JSON.parse(event.data);
-              if (!message.timestamp) {
-                message.timestamp = Date.now();
-              }
+        ws.onopen = () => {
+          console.log("✅ WebSocket connected successfully");
+          setIsConnected(true);
+        };
 
-              if (message.chatId === chatId) {
-                setMessages((prevMessages) => [...prevMessages, message]);
-              }
-            } catch (err) {
-              console.error("Error parsing message: ", err);
+        ws.onmessage = async (event) => {
+          try {
+            const message = await JSON.parse(event.data);
+            if (!message.timestamp) {
+              message.timestamp = Date.now();
             }
-          };
 
-          ws.onerror = (err) => {
-            console.error("WebSocket error: ", err);
-            setIsConnected(false);
-          };
+            if (message.chatId === chatId) {
+              setMessages((prevMessages) => [...prevMessages, message]);
+            }
+          } catch (err) {
+            console.error("Error parsing message: ", err);
+          }
+        };
 
-          ws.onclose = () => {
-            console.warn("WebSocket closed, attempting to reconnect...");
-            setIsConnected(false);
-            setTimeout(connectWebSocket, 3000);
-          };
-        } catch (error) {
-          console.error("Failed to create WebSocket connection:", error);
+        ws.onerror = (err) => {
+          console.error("WebSocket error: ", err);
           setIsConnected(false);
-        }
-      };
+        };
 
-      connectWebSocket();
-
-      return () => {
-        if (wsRef.current) {
-          wsRef.current.close();
-          wsRef.current = null;
-        }
+        ws.onclose = () => {
+          console.warn("WebSocket closed, attempting to reconnect...");
+          setIsConnected(false);
+          setTimeout(connectWebSocket, 3000);
+        };
+      } catch (error) {
+        console.error("Failed to create WebSocket connection:", error);
         setIsConnected(false);
-      };
-    
+      }
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      setIsConnected(false);
+    };
   }, [userId]);
 
   const handleSendMessage = () => {
     console.log("🟡 Send button clicked");
     console.log("🟡 New message content:", newMessage);
-    
+
     if (!newMessage.trim()) {
       console.log("⚠️ Message is empty, not sending");
       return;
@@ -180,7 +180,7 @@ const getWebSocketUrl = () => {
     if (wsRef.current.readyState !== WebSocket.OPEN) {
       console.error("❌ WebSocket not open. State:", wsRef.current.readyState);
       toast.error("Connection lost. Trying to reconnect...");
-      
+
       // Store message temporarily and try to reconnect
       const messageToSend: Message = {
         chatId,
@@ -189,12 +189,14 @@ const getWebSocketUrl = () => {
         recipientId: phone,
         timestamp: Date.now(),
       };
-      
+
       // Save to localStorage for retry
-      const pendingMessages = JSON.parse(localStorage.getItem('pendingMessages') || '[]');
+      const pendingMessages = JSON.parse(
+        localStorage.getItem("pendingMessages") || "[]",
+      );
       pendingMessages.push(messageToSend);
-      localStorage.setItem('pendingMessages', JSON.stringify(pendingMessages));
-      
+      localStorage.setItem("pendingMessages", JSON.stringify(pendingMessages));
+
       setNewMessage("");
       toast.success("Message saved. Will send when reconnected.");
       return;
@@ -221,7 +223,7 @@ const getWebSocketUrl = () => {
 
   // Handle Enter key press
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
@@ -243,9 +245,15 @@ const getWebSocketUrl = () => {
       <div className="p-4 bg-gray-200 flex justify-between items-center">
         <div className="flex items-center space-x-4">
           <h2 className="text-xl text-black-900">Chat with {phone}</h2>
-          <div className={`flex items-center space-x-2 ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-            <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-            <span className="text-sm">{isConnected ? 'Connected' : 'Disconnected'}</span>
+          <div
+            className={`flex items-center space-x-2 ${isConnected ? "text-green-600" : "text-red-600"}`}
+          >
+            <div
+              className={`w-3 h-3 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}
+            ></div>
+            <span className="text-sm">
+              {isConnected ? "Connected" : "Disconnected"}
+            </span>
           </div>
         </div>
         <button
@@ -275,18 +283,18 @@ const getWebSocketUrl = () => {
             <div
               key={index}
               className={`flex mb-4 ${
-                msg.senderId === userId
-                  ? "justify-end"
-                  : "justify-start"
+                msg.senderId === userId ? "justify-end" : "justify-start"
               }`}
             >
-              <div className={`max-w-xs break-words p-3 rounded-lg ${
-                msg.senderId === userId
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-300 text-black"
-              }`}>
+              <div
+                className={`max-w-xs break-words p-3 rounded-lg ${
+                  msg.senderId === userId
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-300 text-black"
+                }`}
+              >
                 <div className="text-sm opacity-75 mb-1">
-                  {msg.senderId === userId ? 'You' : msg.senderId}
+                  {msg.senderId === userId ? "You" : msg.senderId}
                 </div>
                 <div>{msg.content}</div>
                 <div className="text-xs opacity-75 mt-1">

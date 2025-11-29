@@ -30,27 +30,25 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt", // required to store token on frontend
   },
 
-callbacks: {
-  async jwt({ token, user, account }) {
-    if (account && user) {
-      token.id = user.id;
-      token.accessToken = account.access_token!;
-      token.provider = account.provider!;
-      token.githubAccessToken = account.access_token!;
-    }
-    return token;
+  callbacks: {
+    async jwt({ token, user, account }) {
+      if (account && user) {
+        token.id = user.id;
+        token.accessToken = account.access_token!;
+        token.provider = account.provider!;
+        token.githubAccessToken = account.access_token!;
+      }
+      return token;
+    },
+
+    async session({ session, token }) {
+      session.user.id = token.id as string;
+      session.user.accessToken = token.accessToken as string;
+      session.user.provider = token.provider as string;
+      session.user.githubAccessToken = token.githubAccessToken as string;
+      return session;
+    },
   },
-
-  async session({ session, token }) {
-    session.user.id = token.id as string;
-    session.user.accessToken = token.accessToken as string;
-    session.user.provider = token.provider as string;
-    session.user.githubAccessToken = token.githubAccessToken as string;
-    return session;
-  }
-}
-,
-
   pages: {
     signIn: "/auth/signin",
     error: "/auth/error",

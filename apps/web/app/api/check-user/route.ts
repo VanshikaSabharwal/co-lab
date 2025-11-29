@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     // Adjust length check as necessary
     return NextResponse.json(
       { exists: false, error: "Invalid phone number" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
     console.error("Error while checking user with phone:", phone, err);
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../lib/auth";
 import prisma from "../../lib/prisma";
 
-
 export async function GET(_req: Request) {
   try {
     //    Get logged-in user from session
@@ -11,7 +10,7 @@ export async function GET(_req: Request) {
     if (!session?.user?.email) {
       return NextResponse.json(
         { exists: false, error: "Not authenticated" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -26,7 +25,7 @@ export async function GET(_req: Request) {
     if (!user) {
       return NextResponse.json(
         { exists: false, error: "User not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -40,7 +39,7 @@ export async function GET(_req: Request) {
     console.error("Error while checking user phone:", err);
     return NextResponse.json(
       { exists: false, error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

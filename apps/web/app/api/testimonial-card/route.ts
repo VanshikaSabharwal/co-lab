@@ -9,7 +9,7 @@ export async function GET() {
     console.error("Error fetching testimonials:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     await prisma.$disconnect();
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
         {
           error: "Name and description are required fields",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
         {
           error: "Testimonials already exist",
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     console.error("Error while creating Testimonial:", err);
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -70,7 +70,7 @@ export async function DELETE(req: Request) {
     if (!userId) {
       return NextResponse.json(
         { error: "ID and User ID are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -82,14 +82,14 @@ export async function DELETE(req: Request) {
     if (!testimonial) {
       return NextResponse.json(
         { error: "Testimonial not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     if (testimonial.userId !== userId) {
       return NextResponse.json(
         { error: "You are not authorized to delete this testimonial" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -100,13 +100,13 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json(
       { message: "Testimonial deleted successfully" },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     console.error("Error deleting testimonial:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     await prisma.$disconnect();

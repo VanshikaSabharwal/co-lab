@@ -37,8 +37,8 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const groupName = groupDetails?.groupName;
   const githubRepo = groupDetails?.githubRepo;
-  console.log('groupDetails', groupDetails)
-  console.log('groupName', groupName);
+  console.log("groupDetails", groupDetails);
+  console.log("groupName", groupName);
 
   const senderId = session?.user?.id;
   const senderName = session?.user?.name;
@@ -94,7 +94,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
       const fetchMembers = async () => {
         try {
           const res = await fetch(
-            `/api/check-group-member?group=${group}&userId=${senderId}`
+            `/api/check-group-member?group=${group}&userId=${senderId}`,
           );
           const data = await res.json();
           setIsMember(data.exists);
@@ -108,18 +108,17 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
 
       // Establish WebSocket connection
       if (!wsRef.current) {
-
-        if(process.env.NODE_ENV === 'development'){
-           wsRef.current = new WebSocket(
-          `ws://localhost:8080/ws?userId=${senderId}&groupId=${group}`
-        );
-        }else if(process.env.NODE_ENV === 'production'){
-                  wsRef.current = new WebSocket(
-          `${process.env.WEB_SOCKET_URL}/ws?userId=${senderId}&groupId=${group}`
-        );
+        if (process.env.NODE_ENV === "development") {
+          wsRef.current = new WebSocket(
+            `ws://localhost:8080/ws?userId=${senderId}&groupId=${group}`,
+          );
+        } else if (process.env.NODE_ENV === "production") {
+          wsRef.current = new WebSocket(
+            `${process.env.WEB_SOCKET_URL}/ws?userId=${senderId}&groupId=${group}`,
+          );
         }
         wsRef.current = new WebSocket(
-          `${process.env.WEB_SOCKET_URL}/ws?userId=${senderId}&groupId=${group}`
+          `${process.env.WEB_SOCKET_URL}/ws?userId=${senderId}&groupId=${group}`,
         );
 
         // Handle incoming WebSocket messages
@@ -169,7 +168,12 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         senderName,
         createdAt: Date.now(),
       };
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+
+      // Optimistic UI update
+      setMessages((prev) => [...prev, message]);
+      setNewMessage("");
+
+      if (wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify(message));
         setNewMessage("");
       }
@@ -236,7 +240,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
               {groupDetails?.groupName}
             </h1>
             <h2 className="text-xs sm:text-sm text-center mt-1">
-              Group ID: {group}
+              Group Chat: {group}
             </h2>
             <Link href={`/code-editor/${group}/${githubRepo}`}>
               <button className="mt-2 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition duration-300">
@@ -277,7 +281,7 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 placeholder="Type a message..."
-                className="w-full border rounded-lg px-4 py-2 text-sm"
+                className="w-full border text-black rounded-lg px-4 py-2 text-sm"
               />
               <button
                 onClick={handleSendMessage}

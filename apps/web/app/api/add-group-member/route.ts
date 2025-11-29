@@ -7,7 +7,7 @@ export async function POST(req: Request) {
   if (!userId || !groupId) {
     return NextResponse.json(
       { error: "User ID and Group ID are required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     if (existingMember) {
       return NextResponse.json(
         { error: "User is already a member of the group" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -47,13 +47,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       { success: true, message: "User added to the group" },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error) {
     console.error("Error adding user to group:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

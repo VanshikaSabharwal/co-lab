@@ -8,9 +8,9 @@ const port = 8080;
 app.use(Express.json());
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ 
+const wss = new WebSocketServer({
   server,
-  path: "/ws" // Add this to handle /ws path
+  path: "/ws", // Add this to handle /ws path
 });
 
 const groupClients = new Map();
@@ -35,11 +35,13 @@ wss.on("connection", (ws, req) => {
   console.log(`✅ Client connected: ${userId}`);
 
   // Send connection confirmation
-  ws.send(JSON.stringify({
-    type: "connection_established",
-    message: "WebSocket connection established successfully",
-    userId: userId
-  }));
+  ws.send(
+    JSON.stringify({
+      type: "connection_established",
+      message: "WebSocket connection established successfully",
+      userId: userId,
+    }),
+  );
 
   // WebSocket message handling
   ws.on("message", (message) => {
@@ -50,10 +52,12 @@ wss.on("connection", (ws, req) => {
       // Validate message structure
       if (!parsedMessage.recipientId || !parsedMessage.content) {
         console.log("❌ Invalid message format");
-        ws.send(JSON.stringify({
-          type: "error",
-          message: "Invalid message format"
-        }));
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            message: "Invalid message format",
+          }),
+        );
         return;
       }
 
@@ -61,38 +65,51 @@ wss.on("connection", (ws, req) => {
       const recipientWs = individualClients.get(parsedMessage.recipientId);
 
       if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
-        console.log(`📤 Sending message to recipient: ${parsedMessage.recipientId}`);
-        recipientWs.send(JSON.stringify({
-          ...parsedMessage,
-          timestamp: Date.now()
-        }));
-        
+        console.log(
+          `📤 Sending message to recipient: ${parsedMessage.recipientId}`,
+        );
+        recipientWs.send(
+          JSON.stringify({
+            ...parsedMessage,
+            timestamp: Date.now(),
+          }),
+        );
+
         // Send delivery confirmation to sender
-        ws.send(JSON.stringify({
-          type: "message_delivered",
-          messageId: parsedMessage.timestamp,
-          recipientId: parsedMessage.recipientId
-        }));
+        ws.send(
+          JSON.stringify({
+            type: "message_delivered",
+            messageId: parsedMessage.timestamp,
+            recipientId: parsedMessage.recipientId,
+          }),
+        );
       } else {
         console.log(`❌ Recipient ${parsedMessage.recipientId} not connected`);
-        ws.send(JSON.stringify({
-          type: "error",
-          message: `Recipient ${parsedMessage.recipientId} is not connected`
-        }));
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            message: `Recipient ${parsedMessage.recipientId} is not connected`,
+          }),
+        );
       }
-
     } catch (error) {
       console.error("❌ Error processing message:", error);
-      ws.send(JSON.stringify({
-        type: "error",
-        message: "Error processing message"
-      }));
+      ws.send(
+        JSON.stringify({
+          type: "error",
+          message: "Error processing message",
+        }),
+      );
     }
   });
 
   // Handle WebSocket disconnection
   ws.on("close", (code, reason) => {
-    console.log(`🔌 WebSocket connection closed for ${userId}:`, code, reason?.toString());
+    console.log(
+      `🔌 WebSocket connection closed for ${userId}:`,
+      code,
+      reason?.toString(),
+    );
 
     // Remove the client from individual tracking
     if (individualClients.get(userId) === ws) {
@@ -122,7 +139,7 @@ app.get("/health", (req, res) => {
   res.json({
     status: "ok",
     connectedClients: individualClients.size,
-    activeGroups: groupClients.size
+    activeGroups: groupClients.size,
   });
 });
 
@@ -130,10 +147,10 @@ app.get("/health", (req, res) => {
 app.get("/clients", (req, res) => {
   res.json({
     connectedClients: Array.from(individualClients.keys()),
-    activeGroups: Array.from(groupClients.keys()).map(groupId => ({
+    activeGroups: Array.from(groupClients.keys()).map((groupId) => ({
       groupId,
-      members: Array.from(groupClients.get(groupId).keys())
-    }))
+      members: Array.from(groupClients.get(groupId).keys()),
+    })),
   });
 });
 

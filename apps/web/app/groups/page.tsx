@@ -53,7 +53,7 @@ export default async function MyGroups() {
               </a>{" "}
               <br />
               <a href={`group/${group.id}`} className="text-blue-600">
-                <strong>Group ID:</strong> {group.id}
+                <strong>Group Chat:</strong> {group.id}
               </a>
               <br />
               {group.ownerId === userId ? (

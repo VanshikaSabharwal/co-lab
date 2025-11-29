@@ -29,7 +29,7 @@ export async function GET(req: Request) {
     if (notifications.length === 0) {
       return NextResponse.json(
         { success: true, notifications: [] },
-        { status: 200 }
+        { status: 200 },
       );
     }
 
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
     console.error("Error fetching notifications:", error);
     return NextResponse.json(
       { error: "Error while sending notification" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

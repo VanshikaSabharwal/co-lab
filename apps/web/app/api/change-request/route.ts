@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   if (!groupId) {
     return NextResponse.json(
       { error: "Group ID is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -49,13 +49,13 @@ export async function POST(req: Request) {
     // Return success response with required data
     return NextResponse.json(
       { success: true, notification, userId, ownerId, ownerName, groupName },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error) {
     console.error("Error creating change request notification:", error);
     return NextResponse.json(
       { error: "Failed to create notification" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
