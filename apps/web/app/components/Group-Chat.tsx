@@ -36,6 +36,9 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const [loadingPercentage, setLoadingPercentage] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const groupName = groupDetails?.groupName;
+  const githubRepo = groupDetails?.githubRepo;
+  console.log("groupName: ", groupName)
+  console.log("githubRepo: ", githubRepo)
 
   const senderId = session?.user?.id;
   const senderName = session?.user?.name;

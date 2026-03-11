@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { FaPaperPlane } from "react-icons/fa";
+import { TbSend } from "react-icons/tb";
 import toast from "react-hot-toast";
 import Link from "next/link";
 
@@ -285,9 +285,9 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
               />
               <button
                 onClick={handleSendMessage}
-                className="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition duration-200"
+                className="bg-blue-500 text-black p-2 rounded-full hover:bg-blue-600 transition duration-200"
               >
-                <FaPaperPlane size={20} />
+                <TbSend size={20} />
               </button>
             </div>
           </div>

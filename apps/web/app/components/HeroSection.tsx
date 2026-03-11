@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import { Code, MessageSquare, Users } from "lucide-react";
@@ -25,6 +25,30 @@ const HeroSection = () => {
   const [inputName, setInputName] = useState("");
   const [inputDescription, setInputDescription] = useState("");
   const testimonialUserId = session?.user?.email || guestData?.guestId;
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+useEffect(() => {
+  const container = scrollRef.current;
+  if (!container) return;
+
+  let animationFrame: number;
+
+  const scroll = () => {
+    if (!container) return;
+
+    container.scrollLeft += 0.5; // speed
+
+    if (container.scrollLeft >= container.scrollWidth - container.clientWidth) {
+      container.scrollLeft = 0; // loop
+    }
+
+    animationFrame = requestAnimationFrame(scroll);
+  };
+
+  animationFrame = requestAnimationFrame(scroll);
+
+  return () => cancelAnimationFrame(animationFrame);
+}, []);
 
   useEffect(() => {
     let guestId = Cookies.get("guestId");
@@ -117,8 +141,8 @@ const HeroSection = () => {
   };
 
   return (
-    <div>
-      <div className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-black text-white p-6 overflow-hidden">
+    <div className="bg-gradient-to-br from-gray-900 to-black">
+      <div className="relative min-h-screen flex flex-col items-center justify-center text-white p-6 overflow-hidden">
         {/* Decorative elements */}
         <div className="absolute top-10 left-10 w-20 h-20 bg-blue-600 rounded-full mix-blend-overlay filter blur-xl opacity-20 animate-pulse"></div>
         <div className="absolute top-0 right-0 w-72 h-72 bg-purple-600 rounded-full mix-blend-overlay filter blur-xl opacity-10 animate-pulse animation-delay-2000"></div>
@@ -226,65 +250,94 @@ const HeroSection = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8 }}
-        className="mt-16 max-w-2xl mx-auto "
+        className="w-full"
       >
-        <h2 className="text-3xl font-bold mb-6 text-center ">Testimonials</h2>
-        <div className="flex flex-wrap justify-center gap-6">
-          {testimonials.length > 0 ? (
-            testimonials.map((testimonial, index) => (
-              <div
-                key={index}
-                className="flex-1 min-w-[300px] max-w-[800px] p-6 bg-gray-800 text-white rounded-lg shadow-lg hover:shadow-xl transition-all"
-              >
-                {/* Review text centered */}
-                <p className="text-lg font-medium text-gray-200 text-center mb-4">
-                  "{testimonial.description}"
-                </p>
-                <div className="text-sm text-gray-400 font-semibold text-right">
-                  - {testimonial.name}
-                </div>
-                {testimonialUserId === testimonial.userId && (
-                  <button
-                    onClick={() => handleDeleteTestimonial(testimonial.id)}
-                    className="bg-red-600 text-white text-xs px-2 py-1 rounded hover:bg-red-500 transition-all"
-                  >
-                    Delete
-                  </button>
-                )}
-              </div>
-            ))
-          ) : (
-            <p className="text-gray-400 text-center">No testimonials yet.</p>
-          )}
-        </div>
+        <h1 className="text-4xl font-bold mb-6 text-center text-white pt-12">Testimonials</h1>
+{/* Testimonials */}
+<motion.div
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.8 }}
+  className="mt-24 w-full px-6"
+>
 
-        <div className="mt-8 p-4 bg-gray-800 rounded-lg shadow-lg">
-          <h3 className="text-xl font-semibold mb-4">Add Your Testimonial</h3>
-          <input
-            type="text"
-            value={inputName}
-            onChange={(e) => setInputName(e.target.value)}
-            placeholder="Your Name"
-            className="w-full mb-4 p-2 rounded bg-gray-700 text-white focus:outline-none"
-          />
-          <textarea
-            value={inputDescription}
-            onChange={(e) => setInputDescription(e.target.value)}
-            placeholder="Your Testimonial"
-            className="w-full mb-4 p-2 rounded bg-gray-700 text-white focus:outline-none"
-            rows={4}
-          />
-          <button
-            onClick={handleAddTestimonial}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg shadow-lg hover:bg-blue-500 transition-all"
-          >
-            Submit Testimonial
-          </button>
+  <div
+  ref={scrollRef}
+  className="flex gap-6 overflow-x-auto pb-6 px-2 snap-x snap-mandatory scrollbar-hide"
+  > 
+    {testimonials.length > 0 ? (
+      testimonials.map((testimonial) => (
+        <div
+          key={testimonial.id}
+          className="flex-shrink-0 w-[85%] sm:w-[60%] md:w-[45%] lg:w-[30%] relative p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-white/10 shadow-lg hover:shadow-blue-500/20 hover:-translate-y-2 transition-all duration-300"
+        >
+
+          <p className="text-gray-300 leading-relaxed mt-4">
+            {testimonial.description}
+          </p>
+
+          <div className="mt-6 flex items-center justify-between">
+            <span className="text-sm font-semibold text-gray-400">
+              — {testimonial.name}
+            </span>
+
+            {testimonialUserId === testimonial.userId && (
+              <button
+                onClick={() => handleDeleteTestimonial(testimonial.id)}
+                className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded hover:bg-red-500/30 transition"
+              >
+                Delete
+              </button>
+            )}
+          </div>
         </div>
+      ))
+    ) : (
+      <p className="text-gray-400 text-center col-span-full">
+        No testimonials yet.
+      </p>
+    )}
+  </div>
+</motion.div>
+
+<div className="mt-16 max-w-2xl mx-auto px-6 py-6">
+  <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8 shadow-lg">
+    
+    <h3 className="text-2xl font-semibold mb-6 text-center bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+      Add Your Testimonial
+    </h3>
+
+    <div className="space-y-4">
+      <input
+        type="text"
+        value={inputName}
+        onChange={(e) => setInputName(e.target.value)}
+        placeholder="Your Name"
+        className="w-full px-4 py-3 rounded-lg bg-gray-900/70 border border-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+      />
+
+      <textarea
+        value={inputDescription}
+        onChange={(e) => setInputDescription(e.target.value)}
+        placeholder="Share your experience using Ko-Lab..."
+        rows={4}
+        className="w-full px-4 py-3 rounded-lg bg-gray-900/70 border border-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition resize-none"
+      />
+
+      <button
+        onClick={handleAddTestimonial}
+        className="w-full py-3 rounded-lg font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all shadow-lg hover:shadow-blue-500/30"
+      >
+        Submit Testimonial
+      </button>
+    </div>
+
+  </div>
+</div>
       </motion.div>
       <Footer />
     </div>
-  );
-};
+  )
+}
 
 export default HeroSection;

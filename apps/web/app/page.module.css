@@ -16,6 +16,32 @@
   font-synthesis: none;
 }
 
+/* Embla Carousel for Testimonial*/
+.embla {
+  width: 100%;
+  margin: auto;
+}
+
+.embla__viewport {
+  overflow: hidden;
+}
+
+.embla__container {
+  display: flex;
+  flex-direction: row;
+}
+
+/* .embla__slide {
+  flex: 0 0 33.333%;
+}
+
+.embla__slide {
+  flex: 0 0 100%;
+  display: flex;
+  justify-content: center;
+} */
+
+/* Media tag for responsiveness */
 @media (prefers-color-scheme: dark) {
   .page {
     --gray-rgb: 255, 255, 255;
