@@ -2,11 +2,12 @@ import Link from "next/link";
 import { X, Linkedin, Github } from "lucide-react";
 
 const Footer = () => {
+  const year = new Date().getFullYear();
   return (
-    <footer className="bg-gray-900 text-white py-6 px-8">
+    <footer className="bg-gray-100 dark:bg-gray-900 text-gray-700 dark:text-white py-6 px-8">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center">
         <p className="text-sm mb-4 md:mb-0">
-          &copy; 2024 Ko-lab. All rights reserved.
+          &copy; {year} Ko-lab. All rights reserved.
         </p>
         <div className="flex space-x-4">
           <Link

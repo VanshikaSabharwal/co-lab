@@ -55,7 +55,8 @@ function rateLimitResponse(retryAfterSeconds = 60): NextResponse {
 }
 
 export function middleware(request: NextRequest) {
-  const { pathname, method } = request.nextUrl;
+  const { pathname } = request.nextUrl;
+  const { method } = request;
   const ip = getClientIP(request);
 
   // ── CORS preflight ────────────────────────────────────────────────────────

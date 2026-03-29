@@ -14,7 +14,7 @@ export function Appbar() {
   const { data: session, status } = useSession();
 
   return (
-    <div className="flex justify-between items-center px-4 sm:px-6 lg:px-8 py-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-purple-900 shadow-lg">
+    <div className="flex justify-between items-center px-4 sm:px-6 lg:px-8 py-4 bg-[#171618] shadow-lg">
       <a
         href="/"
         className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 hover:from-purple-400 hover:to-blue-600 transition-all duration-300"
@@ -40,7 +40,7 @@ export function Appbar() {
             </Button>
             <Button
               onClick={() => signIn("google")}
-              classname="bg-blue-500 text-white text-sm font-semibold px-4 py-2 rounded-full shadow-md hover:bg-blue-600 transition duration-300 transform hover:scale-105"
+              classname="bg-gray-800 text-white text-sm font-semibold px-4 py-2 rounded-full shadow-md hover:bg-gray-900 transition duration-300 transform hover:scale-105"
             >
               Login with Google
             </Button>
