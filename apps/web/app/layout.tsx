@@ -26,14 +26,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <Providers>
-        <body className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${geistSans.variable} ${geistMono.variable} bg-white dark:bg-gray-950 text-gray-900 dark:text-white transition-colors duration-300`}>
+        <Providers>
           <Header />
           {children}
           <Toaster />
-        </body>
-      </Providers>
+        </Providers>
+      </body>
     </html>
-  )
+  );
 }

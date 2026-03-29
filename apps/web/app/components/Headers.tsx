@@ -1,15 +1,80 @@
 "use client";
-import { Appbar } from "@repo/ui/header";
-import { signOut, signIn, useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+
+import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
+import { signIn, signOut, useSession } from "next-auth/react";
+import { Sun, Moon, Github } from "lucide-react";
 
 const Header = () => {
-  const session = useSession();
-  const router = useRouter();
+  const { data: session, status } = useSession();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
-    <div>
-      <Appbar />
-    </div>
+    <nav className="sticky top-0 z-50 w-full border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-14">
+
+          {/* Logo */}
+          <a
+            href="/"
+            className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-purple-600 hover:from-purple-500 hover:to-blue-600 transition-all duration-300 tracking-tight"
+          >
+            Ko-lab
+          </a>
+
+          {/* Right side */}
+          <div className="flex items-center gap-2">
+            {/* Theme Toggle */}
+            {mounted && (
+              <button
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200"
+                aria-label="Toggle theme"
+              >
+                {theme === "dark" ? (
+                  <Sun className="w-4 h-4" />
+                ) : (
+                  <Moon className="w-4 h-4" />
+                )}
+              </button>
+            )}
+
+            {/* Auth Buttons */}
+            {status === "authenticated" ? (
+              <button
+                onClick={() => signOut()}
+                className="text-sm font-medium px-4 py-1.5 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-200"
+              >
+                Sign out
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => signIn("github")}
+                  className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-white transition-colors duration-200"
+                >
+                  <Github className="w-4 h-4" />
+                  GitHub
+                </button>
+                <button
+                  onClick={() => signIn("google")}
+                  className="text-sm font-medium px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors duration-200"
+                >
+                  Google
+                </button>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+    </nav>
   );
 };
+
 export default Header;

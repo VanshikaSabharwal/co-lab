@@ -86,8 +86,8 @@ const FriendSearch = () => {
   }
 
   return (
-    <div className="w-full py-2 px-3 bg-white shadow-lg rounded-lg border border-gray-200">
-      <h1 className="text-l sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800">
+    <div className="w-full py-2 px-3 bg-white dark:bg-gray-800 shadow-lg rounded-lg border border-gray-200 dark:border-gray-700">
+      <h1 className="text-l sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800 dark:text-gray-100">
         Search for a Friend
       </h1>
 
@@ -98,7 +98,7 @@ const FriendSearch = () => {
           value={friendNumber}
           onChange={(e) => setFriendNumber(e.target.value)}
           required
-          className="w-full px-4 py-3 text-black border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full px-4 py-3 text-gray-900 dark:text-white bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         />
         <button
           type="submit"
@@ -115,8 +115,8 @@ const FriendSearch = () => {
       )}
 
       {friend && (
-        <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg flex flex-col sm:flex-row items-center justify-between">
-          <span className="text-gray-800 font-medium text-sm sm:text-base">
+        <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg flex flex-col sm:flex-row items-center justify-between">
+          <span className="text-gray-800 dark:text-gray-100 font-medium text-sm sm:text-base">
             {friend.name}
           </span>
           <Link
@@ -131,8 +131,8 @@ const FriendSearch = () => {
       {/* Phone Modal */}
       {showPhoneModal && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-80">
-            <h2 className="text-lg font-bold mb-4 text-gray-800">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-80">
+            <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">
               Please add your Phone Number to proceed.
             </h2>
             <form
@@ -145,7 +145,7 @@ const FriendSearch = () => {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 required
-                className="px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <button
                 type="submit"

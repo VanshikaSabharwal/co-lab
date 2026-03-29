@@ -68,9 +68,9 @@ export default function Component() {
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-gradient-to-br from-gray-900 to-black text-white overflow-hidden">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-56px)] bg-gradient-to-br from-gray-100 to-white dark:from-gray-900 dark:to-black text-gray-900 dark:text-white overflow-hidden">
       {/* Sidebar */}
-      <div className="w-full md:w-1/4 p-4 bg-gray-800 bg-opacity-50 border-b md:border-r border-gray-700 overflow-y-auto">
+      <div className="w-full md:w-1/4 p-4 bg-gray-200 dark:bg-gray-800 bg-opacity-50 border-b md:border-r border-gray-300 dark:border-gray-700 overflow-y-auto">
         <div className="flex flex-col space-y-4">
           <Notifications />
           <div className="text-sm">
@@ -83,11 +83,11 @@ export default function Component() {
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-300 my-6">Contacts</h1>
+        <h1 className="text-2xl font-bold text-gray-700 dark:text-gray-300 my-6">Contacts</h1>
         <FriendSearch />
 
         <div className="mt-8">
-          <h2 className="text-xl font-semibold text-gray-400 mb-4">
+          <h2 className="text-xl font-semibold text-gray-600 dark:text-gray-400 mb-4">
             My Groups:
           </h2>
           <ul className="space-y-4">
@@ -95,7 +95,7 @@ export default function Component() {
               <li
                 key={group.id}
                 onClick={() => handleGroupClick(group)}
-                className="p-4 bg-gray-700 rounded-md cursor-pointer transition-all duration-300 hover:shadow-lg hover:bg-gray-600"
+                className="p-4 bg-gray-300 dark:bg-gray-700 rounded-md cursor-pointer transition-all duration-300 hover:shadow-lg hover:bg-gray-400 dark:hover:bg-gray-600"
               >
                 <strong>Group Name:</strong> {group.groupName} <br />
                 <a
@@ -116,12 +116,12 @@ export default function Component() {
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full md:w-3/4 p-4 bg-gray-900 flex flex-col justify-between h-full hidden md:block"
+        className="w-full md:w-3/4 p-4 bg-gray-50 dark:bg-gray-900 flex flex-col justify-between h-full hidden md:block"
       >
         {selectedChat ? (
           <GroupChat group={selectedChat.id} />
         ) : (
-          <div className="text-gray-300 text-lg text-center mt-10">
+          <div className="text-gray-500 dark:text-gray-300 text-lg text-center mt-10">
             Select a group to start chatting
           </div>
         )}

@@ -82,29 +82,31 @@ export default function GithubGroupCreateLogin() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-100">
+    <div className="min-h-[calc(100vh-56px)] bg-gray-50 dark:bg-gray-950 px-4 py-8 sm:py-10">
       {!session ? (
-        <button
-          onClick={() => signIn("github")}
-          className="flex items-center gap-2 p-3 bg-black text-white rounded-lg hover:bg-gray-900"
-        >
-          <FaGithub size={20} /> Login with GitHub to Create Group
-        </button>
+        <div className="flex flex-col items-center justify-center py-20">
+          <button
+            onClick={() => signIn("github")}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-lg hover:opacity-90 transition"
+          >
+            <FaGithub size={16} /> Login with GitHub to Create Group
+          </button>
+        </div>
       ) : (
-        <div className="w-full max-w-md sm:max-w-lg md:max-w-2xl lg:max-w-3xl bg-white rounded-xl shadow-lg p-8">
-          <h2 className="text-xl font-bold mb-4">Create Group</h2>
+        <div className="w-full max-w-lg mx-auto bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm p-6">
+          <h2 className="text-xl font-bold mb-5 text-gray-900 dark:text-white">Create Group</h2>
 
           {/* GROUP NAME INPUT */}
           <input
             type="text"
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}
-            placeholder="Enter Group Name"
-            className="w-full p-3 border rounded-lg mb-4"
+            placeholder="Enter group name"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg mb-4 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
           />
 
           <select
-            className="w-full p-3 border rounded-lg bg-gray-100"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
             onChange={(e) => setSelectedRepo(JSON.parse(e.target.value))}
           >
             <option>Select a repo</option>
@@ -115,7 +117,7 @@ export default function GithubGroupCreateLogin() {
             ))}
           </select>
 
-          <h3 className="font-semibold mt-6 flex items-center gap-2">
+          <h3 className="text-sm font-semibold mt-5 mb-1 flex items-center gap-2 text-gray-900 dark:text-white">
             Enter SSH Public Key
             <button
               onClick={() => setShowInfo(true)}
@@ -131,12 +133,12 @@ export default function GithubGroupCreateLogin() {
               onClick={() => setShowInfo(false)} // closes modal if clicking outside
             >
               <div
-                className="bg-white p-6 rounded-lg shadow-lg w-96 z-50"
+                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5 rounded-xl shadow-lg w-full max-w-sm mx-4 z-50"
                 onClick={(e) => e.stopPropagation()} // prevent closing when clicking inside modal
               >
-                <h3 className="font-bold text-lg mb-3">How to use this?</h3>
+                <h3 className="font-bold text-lg mb-3 text-gray-900 dark:text-white">How to use this?</h3>
 
-                <p className="text-gray-700 text-sm">
+                <p className="text-gray-700 dark:text-gray-300 text-sm">
                   1. Copy the above SSH command using the Copy button.
                   <br />
                   2. Open your terminal.
@@ -167,7 +169,7 @@ export default function GithubGroupCreateLogin() {
             </div>
           )}
           {/* SSH COMMAND BOX */}
-          <div className="relative bg-gray-800 text-white py-8 px-4 mt-4 rounded-lg text-sm">
+          <div className="relative bg-gray-900 text-gray-100 py-6 px-4 mt-3 rounded-lg text-xs font-mono">
             {/* COPY BUTTON */}
             <button
               onClick={() => {
@@ -192,29 +194,24 @@ cat ~/.ssh/id_ed25519.pub`}
             value={sshToken}
             onChange={(e) => setSshToken(e.target.value)}
             placeholder="Paste SSH public key here"
-            className="w-full p-3 border rounded-lg mt-2"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg mt-3 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
           />
 
-          {/* Save SSH key to GitHub */}
           <a
             href={sshToken ? "https://github.com/settings/ssh/new" : undefined}
-            onClick={(e) => {
-              if (!sshToken) e.preventDefault(); // block click
-            }}
+            onClick={(e) => { if (!sshToken) e.preventDefault(); }}
             target="_blank"
             rel="noopener noreferrer"
-            className={`block text-center w-full mt-2 p-2 rounded-lg text-white transition duration-300 ${
-              sshToken
-                ? "bg-blue-600 hover:bg-blue-700"
-                : "bg-gray-400 cursor-not-allowed"
+            className={`block text-center w-full mt-2 py-2.5 text-sm font-medium rounded-lg text-white transition ${
+              sshToken ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-300 dark:bg-gray-700 cursor-not-allowed"
             }`}
           >
-            Save this SSH key to GitHub
+            Save SSH key to GitHub
           </a>
 
           <button
             onClick={handleCreateGroup}
-            className="mt-6 w-full p-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition duration-300"
+            className="mt-3 w-full py-2.5 text-sm font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg transition"
           >
             Create Group
           </button>

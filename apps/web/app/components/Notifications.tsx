@@ -26,17 +26,16 @@ const Notifications = () => {
     }
   }, [userId]);
 
-  // Remove the notification count once the user clicks the link (simulating view)
   const handleViewNotifications = () => {
-    setNotificationCount(0); // Reset the count
+    setNotificationCount(0); 
   };
 
   return (
     <div className="relative flex items-center space-x-4">
       <Link
         href="/notifications"
-        className="text-white hover:text-blue-600 font-semibold text-lg transition-colors duration-200 hover:scale-105"
-        onClick={handleViewNotifications} // Remove count after viewing
+        className="text-black hover:text-blue-600 font-semibold text-lg transition-colors duration-200 hover:scale-105"
+        onClick={handleViewNotifications} 
       >
         Notifications
         {notificationCount > 0 && (

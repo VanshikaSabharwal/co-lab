@@ -100,12 +100,16 @@ model Messages {
   senderId    String
   chatId      String
   recipientId String
+  isRead      Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   chat      Chat @relation(fields: [chatId], references: [id])
   sender    User @relation("SenderMessages", fields: [senderId], references: [id])
   recipient User @relation("RecipientMessages", fields: [recipientId], references: [id])
+
+  @@index([chatId])
+  @@index([recipientId, isRead])
 }
 
 model Otp {

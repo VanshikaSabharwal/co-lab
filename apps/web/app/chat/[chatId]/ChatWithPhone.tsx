@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import Cookies from "js-cookie";
+
+const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
 interface ChatWithPhoneProps {
   phone: string;
@@ -14,42 +15,115 @@ interface GuestData {
   guestId: string;
 }
 
+type MessageStatus = "sending" | "delivered" | "read";
+
 interface Message {
+  id?: string;
   chatId: string;
   senderId: string;
   content: string;
   recipientId: string;
   timestamp: number;
+  status?: MessageStatus;
+  isNew?: boolean; // true = arrived while offline, shown above divider
 }
 
 const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
   const { data: session, status } = useSession();
-  console.log(session);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-  // const chatId = [session?.user?.phone, phone].sort().join("-");
+  const reconnectAttempts = useRef(0);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef = useRef(true);
   const [chatId, setChatId] = useState("");
-  const [userId, setUserId] = useState("");
-  console.log(userId);
-  const router = useRouter();
+  const [userId, setUserId] = useState(""); // my phone number
   const [guestData, setGuestData] = useState<GuestData | null>(null);
-  const [notification, setNotification] = useState<string | null>(null);
+  const [recipientName, setRecipientName] = useState<string>("");
+  const [newMsgDividerIndex, setNewMsgDividerIndex] = useState<number | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const BG_OPTIONS = [
+    { label: "Default", value: "bg-gray-50 dark:bg-gray-950" },
+    { label: "Midnight", value: "bg-gray-900 dark:bg-gray-900" },
+    { label: "Sky", value: "bg-sky-50 dark:bg-sky-950" },
+    { label: "Sage", value: "bg-emerald-50 dark:bg-emerald-950" },
+    { label: "Rose", value: "bg-rose-50 dark:bg-rose-950" },
+    { label: "Sand", value: "bg-amber-50 dark:bg-amber-950" },
+  ];
+  const [chatBg, setChatBg] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem(`chatBg_${phone}`) || BG_OPTIONS[0]!.value) : BG_OPTIONS[0]!.value
+  );
 
+  // Close menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // ── Emoji reactions ─────────────────────────────────────────────────────────
+  const [activeEmojiPicker, setActiveEmojiPicker] = useState<number | null>(null);
+  const [reactions, setReactions] = useState<Record<number, Record<string, string[]>>>({});
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pointerDownTime = useRef<number>(0);
+
+  useEffect(() => {
+    const handleOutsideClick = () => setActiveEmojiPicker(null);
+    if (activeEmojiPicker !== null) {
+      document.addEventListener("pointerdown", handleOutsideClick);
+    }
+    return () => document.removeEventListener("pointerdown", handleOutsideClick);
+  }, [activeEmojiPicker]);
+
+  const handleMsgPointerDown = useCallback((idx: number) => {
+    pointerDownTime.current = Date.now();
+    longPressTimer.current = setTimeout(() => {
+      setActiveEmojiPicker((prev) => (prev === idx ? null : idx));
+    }, 500);
+  }, []);
+
+  const handleMsgPointerUp = useCallback((e: React.PointerEvent, idx: number) => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    if (e.pointerType === "mouse" && Date.now() - pointerDownTime.current < 300) {
+      setActiveEmojiPicker((prev) => (prev === idx ? null : idx));
+    }
+  }, []);
+
+  const handleMsgPointerCancel = useCallback(() => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  }, []);
+
+  const handleReact = useCallback((idx: number, emoji: string, currentUserId: string) => {
+    setReactions((prev) => {
+      const msgReactions = { ...(prev[idx] || {}) };
+      const users = [...(msgReactions[emoji] || [])];
+      const i = users.indexOf(currentUserId);
+      if (i >= 0) users.splice(i, 1);
+      else users.push(currentUserId);
+      if (users.length === 0) delete msgReactions[emoji];
+      else msgReactions[emoji] = users;
+      return { ...prev, [idx]: msgReactions };
+    });
+    setActiveEmojiPicker(null);
+  }, []);
+
+  // ── Fetch my phone + recipient name ─────────────────────────────────────────
   useEffect(() => {
     const fetchUserPhone = async () => {
       if (session?.user?.email) {
         try {
-          const res = await fetch(
-            `/api/get-user-number?email=${session.user.email}`,
-          );
+          const res = await fetch(`/api/get-user-number?email=${session.user.email}`);
           const data = await res.json();
           if (res.ok) {
             setUserId(data.phone || "");
             setChatId([data.phone, phone].sort().join("-"));
-          } else {
-            console.error("Failed to fetch phone:", data.error);
           }
         } catch (err) {
           console.error("Error fetching phone:", err);
@@ -57,269 +131,425 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
       }
     };
 
-    if (status === "authenticated") {
-      fetchUserPhone();
-    }
-  }, [status, session?.user?.email, phone]);
-
-  // Get WebSocket URL based on environment
-  const getWebSocketUrl = () => {
-    if (!userId) return "";
-
-    // For development: connect directly to WebSocket server on port 8080
-    if (process.env.NODE_ENV === "development") {
-      return `ws://localhost:8080/ws?userId=${userId}`;
-    } else if (process.env.NODE_ENV === "production") {
-      return `wss://ko-lab.onrender.com/ws?userId=${userId}`;
-    }
-
-    // For production: use the same host but different path
-    return `wss://ko-lab.onrender.com/ws?userId=${userId}`;
-  };
-
-  useEffect(() => {
-    const guestId = Cookies.get("guestId");
-    if (guestId) {
-      setGuestData({ guestId });
-    }
-  }, []);
-
-  useEffect(() => {
-    const savedMessages = localStorage.getItem(chatId);
-    if (savedMessages) {
-      setMessages(JSON.parse(savedMessages));
-    }
-  }, [chatId]);
-
-  // Save messages to localStorage whenever they change
-  useEffect(() => {
-    if (messages.length > 0) {
-      localStorage.setItem(chatId, JSON.stringify(messages));
-    }
-  }, [messages, chatId]);
-
-  useEffect(() => {
-    if (!userId) return;
-    const connectWebSocket = () => {
+    const fetchRecipientName = async () => {
       try {
-        const wsUrl = getWebSocketUrl();
-        console.log("🔗 Connecting to WebSocket:", wsUrl);
-
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
-
-        ws.onopen = () => {
-          console.log("✅ WebSocket connected successfully");
-          setIsConnected(true);
-        };
-
-        ws.onmessage = async (event) => {
-          try {
-            const message = await JSON.parse(event.data);
-            if (!message.timestamp) {
-              message.timestamp = Date.now();
-            }
-
-            if (message.chatId === chatId) {
-              setMessages((prevMessages) => [...prevMessages, message]);
-            }
-          } catch (err) {
-            console.error("Error parsing message: ", err);
-          }
-        };
-
-        ws.onerror = (err) => {
-          console.error("WebSocket error: ", err);
-          setIsConnected(false);
-        };
-
-        ws.onclose = () => {
-          console.warn("WebSocket closed, attempting to reconnect...");
-          setIsConnected(false);
-          setTimeout(connectWebSocket, 3000);
-        };
-      } catch (error) {
-        console.error("Failed to create WebSocket connection:", error);
-        setIsConnected(false);
+        const res = await fetch(`/api/get-user-number?phone=${phone}`);
+        const data = await res.json();
+        setRecipientName(res.ok && data.name ? data.name : phone);
+      } catch {
+        setRecipientName(phone);
       }
     };
 
-    connectWebSocket();
+    if (status === "authenticated") {
+      fetchUserPhone();
+      fetchRecipientName();
+    }
+  }, [status, session?.user?.email, phone]);
+
+  // ── Guest cookie ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const guestId = Cookies.get("guestId");
+    if (guestId) setGuestData({ guestId });
+  }, []);
+
+  // ── Load messages from DB when userId is ready ───────────────────────────────
+  useEffect(() => {
+    if (!userId || !phone) return;
+
+    const loadMessages = async () => {
+      try {
+        console.log("[LOAD] fetching messages, senderPhone:", userId, "recipientPhone:", phone);
+        const res = await fetch(`/api/direct-message?senderPhone=${userId}&recipientPhone=${phone}`);
+        const data = await res.json();
+        console.log("[LOAD] response status:", res.status, "data:", data);
+        if (!res.ok || !data.messages) {
+          console.error("[LOAD] failed:", data);
+          return;
+        }
+
+        const lastSeenKey = `lastSeen_${chatId}`;
+        const lastSeen = parseInt(localStorage.getItem(lastSeenKey) || "0", 10);
+
+        const formatted: Message[] = data.messages.map((m: any) => ({
+          id: m.id,
+          chatId: chatId || [userId, phone].sort().join("-"),
+          senderId: m.senderId,
+          recipientId: m.recipientId,
+          content: m.content,
+          timestamp: m.createdAt,
+          status: m.senderId === userId
+            ? (m.isRead ? "read" : "delivered")
+            : "read",
+          isNew: m.senderId !== userId && m.createdAt > lastSeen,
+        }));
+
+        // Find where new messages start for the divider
+        const firstNewIdx = formatted.findIndex((m) => m.isNew);
+        setNewMsgDividerIndex(firstNewIdx >= 0 ? firstNewIdx : null);
+        setMessages(formatted);
+
+        // Update lastSeen to now
+        localStorage.setItem(lastSeenKey, String(Date.now()));
+      } catch (err) {
+        console.error("Error loading messages from DB:", err);
+      }
+    };
+
+    loadMessages();
+  }, [userId, phone]);
+
+  // ── Auto-scroll to bottom ────────────────────────────────────────────────────
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // ── WebSocket connection ─────────────────────────────────────────────────────
+  const getWebSocketUrl = () => {
+    if (!userId) return "";
+    if (process.env.NODE_ENV === "development") return `ws://localhost:8080/ws?userId=${userId}`;
+    return `${process.env.NEXT_PUBLIC_WEB_SOCKET_URL}/ws?userId=${userId}`;
+  };
+
+  useEffect(() => {
+    if (!userId) return;
+    isMountedRef.current = true;
+
+    const connect = () => {
+      if (!isMountedRef.current) return;
+      const wsUrl = getWebSocketUrl();
+      if (!wsUrl) return;
+
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setIsConnected(true);
+        reconnectAttempts.current = 0;
+        heartbeatRef.current = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
+        }, 25_000);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === "pong" || message.type === "connection_established") return;
+
+          if (message.type === "message_delivered") {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.timestamp === message.timestamp && m.status === "sending"
+                  ? { ...m, status: "delivered" }
+                  : m
+              )
+            );
+            return;
+          }
+
+          if (message.type === "read_receipt") {
+            setMessages((prev) =>
+              prev.map((m) => (m.status !== "read" ? { ...m, status: "read" } : m))
+            );
+            return;
+          }
+
+          // Incoming message from the other person
+          const incomingChatId = chatId || [userId, phone].sort().join("-");
+          if (message.chatId === incomingChatId) {
+            if (!message.timestamp) message.timestamp = Date.now();
+            setMessages((prev) => [...prev, { ...message, status: "read" as MessageStatus }]);
+            setNewMsgDividerIndex(null); // clear divider when actively chatting
+            // Send read receipt
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "read_receipt", chatId: message.chatId, senderId: message.senderId }));
+            }
+          }
+        } catch (err) {
+          console.error("Error parsing message:", err);
+        }
+      };
+
+      ws.onerror = () => ws.close();
+      ws.onclose = () => {
+        if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+        wsRef.current = null;
+        setIsConnected(false);
+        if (!isMountedRef.current) return;
+        const delay = Math.min(1000 * 2 ** reconnectAttempts.current, 30_000);
+        reconnectAttempts.current++;
+        setTimeout(connect, delay);
+      };
+    };
+
+    connect();
 
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      isMountedRef.current = false;
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      wsRef.current?.close();
+      wsRef.current = null;
       setIsConnected(false);
     };
   }, [userId]);
 
-  const handleSendMessage = () => {
-    console.log("🟡 Send button clicked");
-    console.log("🟡 New message content:", newMessage);
-
-    if (!newMessage.trim()) {
-      console.log("⚠️ Message is empty, not sending");
-      return;
-    }
+  // ── Send message ─────────────────────────────────────────────────────────────
+  const handleSendMessage = async () => {
+    if (!newMessage.trim()) return;
 
     if (guestData && !session) {
-      console.warn("⚠️ Guest user cannot send messages");
       toast.error("Please Sign Up/Login to send messages");
       return;
     }
 
-    // Check WebSocket connection
-    if (!wsRef.current) {
-      console.error("❌ WebSocket reference is null");
-      toast.error("Connection not established. Please refresh the page.");
-      return;
-    }
-
-    if (wsRef.current.readyState !== WebSocket.OPEN) {
-      console.error("❌ WebSocket not open. State:", wsRef.current.readyState);
-      toast.error("Connection lost. Trying to reconnect...");
-
-      // Store message temporarily and try to reconnect
-      const messageToSend: Message = {
-        chatId,
-        senderId: userId || "unknown",
-        content: newMessage,
-        recipientId: phone,
-        timestamp: Date.now(),
-      };
-
-      // Save to localStorage for retry
-      const pendingMessages = JSON.parse(
-        localStorage.getItem("pendingMessages") || "[]",
-      );
-      pendingMessages.push(messageToSend);
-      localStorage.setItem("pendingMessages", JSON.stringify(pendingMessages));
-
-      setNewMessage("");
-      toast.success("Message saved. Will send when reconnected.");
-      return;
-    }
-
-    const messageToSend: Message = {
+    const timestamp = Date.now();
+    const optimisticMsg: Message = {
       chatId,
       senderId: userId,
       recipientId: phone,
       content: newMessage,
-      timestamp: Date.now(),
+      timestamp,
+      status: "sending",
     };
 
+    // Optimistic update
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setNewMessage("");
+
+    // Send via WebSocket for real-time delivery
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(optimisticMsg));
+    }
+
+    // Always save to DB (ensures offline recipient gets it)
     try {
-      wsRef.current.send(JSON.stringify(messageToSend));
-      console.log("✅ Message sent via WebSocket:", messageToSend);
-      setMessages((prevMessages) => [...prevMessages, messageToSend]);
-      setNewMessage("");
-    } catch (error) {
-      console.error("❌ Error sending message:", error);
-      toast.error("Failed to send message");
+      console.log("[SAVE] senderPhone:", userId, "recipientPhone:", phone, "content:", newMessage);
+      const res = await fetch("/api/direct-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senderPhone: userId, recipientPhone: phone, content: newMessage }),
+      });
+      const data = await res.json();
+      console.log("[SAVE] response status:", res.status, "data:", data);
+      if (!res.ok) throw new Error(data.error || "Failed to save");
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.timestamp === timestamp && m.status === "sending" ? { ...m, status: "delivered" } : m
+        )
+      );
+    } catch (err: any) {
+      console.error("[SAVE] error:", err);
+      toast.error(`Save failed: ${err.message}`);
     }
   };
 
-  // Handle Enter key press
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
 
-  const handleDeleteChat = () => {
-    localStorage.removeItem(chatId);
+  const handleClearChat = () => {
     setMessages([]);
-    toast.success("Chat deleted successfully");
+    setNewMsgDividerIndex(null);
+    setMenuOpen(false);
+    toast.success("Chat cleared");
   };
 
-  const handleViewMessage = () => {
-    router.push(`/chat/${chatId}`);
-    setNotification(null);
+  const handleChangeBg = (value: string) => {
+    setChatBg(value);
+    localStorage.setItem(`chatBg_${phone}`, value);
+    setMenuOpen(false);
   };
 
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-screen">
-      <div className="p-4 bg-gray-200 flex justify-between items-center">
-        <div className="flex items-center space-x-4">
-          <h2 className="text-xl text-black-900">Chat with {phone}</h2>
-          <div
-            className={`flex items-center space-x-2 ${isConnected ? "text-green-600" : "text-red-600"}`}
-          >
-            <div
-              className={`w-3 h-3 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`}
-            ></div>
-            <span className="text-sm">
-              {isConnected ? "Connected" : "Disconnected"}
-            </span>
+    <div className={`flex flex-col h-[calc(100vh-56px)] ${chatBg} transition-colors duration-500`}>
+      {/* Header */}
+      <div className="px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between relative">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold">
+            {(recipientName || phone)[0]?.toUpperCase()}
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">{recipientName || phone}</p>
+            <p className="text-xs text-gray-400">{phone}</p>
           </div>
         </div>
-        <button
-          onClick={handleDeleteChat}
-          className="ml-2 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-        >
-          Delete Chat
-        </button>
-      </div>
 
-      {notification && (
-        <div
-          className="fixed bottom-4 left-4 p-4 bg-yellow-500 text-white rounded-lg cursor-pointer hover:bg-yellow-600 transition-colors"
-          onClick={handleViewMessage}
-        >
-          {notification}
-        </div>
-      )}
+        <div className="flex items-center gap-3">
+          <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-yellow-400 animate-pulse"}`} />
+          <span className="text-xs text-gray-400">{isConnected ? "Online" : "Reconnecting..."}</span>
 
-      <div className="flex-grow p-6 overflow-y-auto bg-gray-50">
-        {messages.length === 0 ? (
-          <div className="text-center text-gray-500 mt-8">
-            No messages yet. Start a conversation!
-          </div>
-        ) : (
-          messages.map((msg, index) => (
-            <div
-              key={index}
-              className={`flex mb-4 ${
-                msg.senderId === userId ? "justify-end" : "justify-start"
-              }`}
+          {/* 3-dot menu */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen((o) => !o)}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
-              <div
-                className={`max-w-xs break-words p-3 rounded-lg ${
-                  msg.senderId === userId
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-300 text-black"
-                }`}
+              <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                <circle cx="10" cy="4" r="1.5" />
+                <circle cx="10" cy="10" r="1.5" />
+                <circle cx="10" cy="16" r="1.5" />
+              </svg>
+            </button>
+
+            {/* Dropdown */}
+            <div className={`absolute right-0 top-10 w-52 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden transition-all duration-200 origin-top-right ${
+              menuOpen ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+            }`}>
+              {/* Clear chat */}
+              <button
+                onClick={handleClearChat}
+                className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
               >
-                <div className="text-sm opacity-75 mb-1">
-                  {msg.senderId === userId ? "You" : msg.senderId}
-                </div>
-                <div>{msg.content}</div>
-                <div className="text-xs opacity-75 mt-1">
-                  {new Date(msg.timestamp).toLocaleTimeString()}
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Clear Chat
+              </button>
+
+              <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Background</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {BG_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleChangeBg(opt.value)}
+                      className={`flex flex-col items-center gap-1 p-1.5 rounded-lg transition-all ${
+                        chatBg === opt.value ? "ring-2 ring-blue-500" : "hover:bg-gray-50 dark:hover:bg-gray-800"
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-full border border-gray-200 dark:border-gray-700 ${opt.value.split(" ")[0]}`} />
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{opt.label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
-          ))
-        )}
+          </div>
+        </div>
       </div>
 
-      <div className="p-4 border-t bg-white flex">
+      {/* Messages */}
+      <div className="flex-grow overflow-y-auto px-4 py-4 space-y-1">
+        {messages.length === 0 ? (
+          <div className="text-center text-gray-400 dark:text-gray-500 text-sm mt-16">
+            No messages yet. Say hello!
+          </div>
+        ) : (
+          messages.map((msg, index) => {
+            const isOwn = msg.senderId === userId;
+            const msgReactions = reactions[index] || {};
+            const hasReactions = Object.keys(msgReactions).length > 0;
+            const showDivider = newMsgDividerIndex !== null && index === newMsgDividerIndex;
+
+            return (
+              <React.Fragment key={index}>
+                {/* New messages divider */}
+                {showDivider && (
+                  <div className="flex items-center gap-2 my-3">
+                    <div className="flex-1 h-px bg-blue-200 dark:bg-blue-800" />
+                    <span className="text-xs text-blue-500 dark:text-blue-400 font-medium whitespace-nowrap px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 rounded-full">
+                      New messages
+                    </span>
+                    <div className="flex-1 h-px bg-blue-200 dark:bg-blue-800" />
+                  </div>
+                )}
+
+                <div className={`flex mb-2 ${isOwn ? "justify-end" : "justify-start"}`}>
+                  <div className="relative max-w-xs sm:max-w-sm">
+                    {/* Emoji picker */}
+                    {activeEmojiPicker === index && (
+                      <div
+                        className={`absolute bottom-full mb-1 z-50 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 flex gap-1 p-1.5 ${isOwn ? "right-0" : "left-0"}`}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        {EMOJIS.map((emoji) => (
+                          <button key={emoji} onClick={() => handleReact(index, emoji, userId)} className="text-lg hover:scale-125 transition-transform leading-none">
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Bubble */}
+                    <div
+                      className={`break-words px-3 py-2 rounded-2xl cursor-pointer select-none ${
+                        isOwn
+                          ? "bg-blue-500 text-white rounded-br-sm"
+                          : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 rounded-bl-sm"
+                      }`}
+                      onPointerDown={() => handleMsgPointerDown(index)}
+                      onPointerUp={(e) => handleMsgPointerUp(e, index)}
+                      onPointerCancel={handleMsgPointerCancel}
+                    >
+                      {!isOwn && (
+                        <p className="text-xs font-semibold mb-0.5 opacity-70">
+                          {recipientName || msg.senderId}
+                        </p>
+                      )}
+                      <p className="text-sm leading-relaxed">{msg.content}</p>
+                      <div className="flex items-center justify-end gap-1 mt-1">
+                        <span className="text-xs opacity-60">
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                        {isOwn && (
+                          <span className="text-xs leading-none">
+                            {msg.status === "read" ? (
+                              <span className="text-blue-200 font-bold">✓✓</span>
+                            ) : msg.status === "delivered" ? (
+                              <span className="opacity-70">✓✓</span>
+                            ) : (
+                              <span className="opacity-40">✓</span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Reactions */}
+                    {hasReactions && (
+                      <div className={`flex flex-wrap gap-1 mt-1 ${isOwn ? "justify-end" : "justify-start"}`}>
+                        {Object.entries(msgReactions).map(([emoji, users]) => (
+                          <button
+                            key={emoji}
+                            onClick={() => handleReact(index, emoji, userId)}
+                            className={`text-xs rounded-full px-1.5 py-0.5 border flex items-center gap-0.5 transition-colors ${
+                              users.includes(userId)
+                                ? "bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200"
+                                : "bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300"
+                            }`}
+                          >
+                            {emoji} <span>{users.length}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </React.Fragment>
+            );
+          })
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input */}
+      <div className="px-4 py-3 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 flex items-center gap-2">
         <input
           type="text"
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder={isConnected ? "Type a message..." : "Connecting..."}
-          disabled={!isConnected}
-          className="flex-grow p-3 border rounded-lg focus:outline-none focus:border-blue-500 disabled:bg-gray-100"
+          onKeyDown={handleKeyDown}
+          placeholder="Type a message..."
+          className="flex-grow px-4 py-2.5 text-sm rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
           onClick={handleSendMessage}
-          disabled={!isConnected || !newMessage.trim()}
-          className="ml-2 p-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          disabled={!newMessage.trim()}
+          className="px-4 py-2.5 text-sm font-semibold rounded-full bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           Send
         </button>

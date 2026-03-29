@@ -1,3 +1,4 @@
+"use client";
 import ChatWithPhone from "./ChatWithPhone";
 
 // This function receives route parameters

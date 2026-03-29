@@ -23,9 +23,18 @@ interface RejectedCrType {
   message: string;
 }
 
+interface DmNotification {
+  name: string;
+  phone: string;
+  count: number;
+  lastMessage: string;
+  lastAt: number;
+}
+
 const NotificationsPage = () => {
   const [notifications, setNotifications] = useState<NotificationsType[]>([]);
   const [rejections, setRejections] = useState<RejectedCrType[]>([]);
+  const [dmNotifications, setDmNotifications] = useState<DmNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { data: session } = useSession();
@@ -36,18 +45,26 @@ const NotificationsPage = () => {
       setLoading(true);
       setError(null);
       try {
+        // Fetch my phone number first for DM notifications
+        const phoneRes = await fetch(`/api/get-user-number?id=${userId}`);
+        const phoneData = await phoneRes.json();
+        const myPhone = phoneData?.phone;
+
         const [notificationsRes, rejectionsRes] = await Promise.all([
           fetch(`/api/notifications?userId=${userId}`),
           fetch(`/api/rejected-cr?userId=${userId}`),
         ]);
-
         const notificationsData = await notificationsRes.json();
         const rejectionsData = await rejectionsRes.json();
 
-        if (notificationsData.success)
-          setNotifications(notificationsData.notifications);
-        if (rejectionsData.success)
-          setRejections(rejectionsData.rejectedNotification);
+        if (notificationsData.success) setNotifications(notificationsData.notifications);
+        if (rejectionsData.success) setRejections(rejectionsData.rejectedNotification);
+
+        if (myPhone) {
+          const dmRes = await fetch(`/api/direct-message/unread?phone=${myPhone}`);
+          const dmData = await dmRes.json();
+          if (dmData.unread) setDmNotifications(dmData.unread);
+        }
       } catch (error) {
         console.error("Error fetching notifications:", error);
         setError("Failed to fetch notifications.");
@@ -55,58 +72,126 @@ const NotificationsPage = () => {
         setLoading(false);
       }
     };
-
-    fetchNotifications();
+    if (userId) fetchNotifications();
   }, [userId]);
 
   if (loading)
     return (
-      <div className="text-center text-gray-500">Loading notifications...</div>
+      <div className="min-h-[calc(100vh-56px)] flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+        <p className="text-sm text-gray-400">Loading notifications...</p>
+      </div>
     );
-  if (error) return <div className="text-center text-red-500">{error}</div>;
+
+  if (error)
+    return (
+      <div className="min-h-[calc(100vh-56px)] flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+        <p className="text-sm text-red-500">{error}</p>
+      </div>
+    );
+
+  const isEmpty = notifications.length === 0 && rejections.length === 0 && dmNotifications.length === 0;
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">All Notifications</h1>
+    <div className="min-h-[calc(100vh-56px)] bg-gray-50 dark:bg-gray-950 px-4 py-8 sm:py-10">
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Notifications</h1>
 
-      <h2 className="text-xl font-semibold mb-2">Change Requests</h2>
-      <ul className="space-y-2">
-        {notifications.map((notification) => (
-          <li key={notification.id} className="p-4 border rounded-md shadow">
-            <p className="text-lg">
-              {notification.userName} raised a CR in{" "}
-              <strong>{notification.groupName}</strong>
-            </p>
-            <Link
-              href={`/confirm-changes/${notification.groupId}`}
-              className="mt-2 inline-block text-blue-500 hover:underline"
-            >
-              View Changes
-            </Link>
-          </li>
-        ))}
-      </ul>
+        {isEmpty ? (
+          <div className="text-center py-16 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800">
+            <p className="text-sm text-gray-500 dark:text-gray-400">You&apos;re all caught up!</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {dmNotifications.length > 0 && (
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
+                  Unread Messages
+                </h2>
+                <ul className="space-y-2">
+                  {dmNotifications.map((dm) => (
+                    <li key={dm.phone}>
+                      <Link
+                        href={`/chat/${dm.phone}`}
+                        className="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-900/40 shadow-sm hover:border-blue-300 dark:hover:border-blue-700 transition"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                            {dm.name[0]?.toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white">{dm.name}</p>
+                            <p className="text-xs text-gray-400 truncate">{dm.lastMessage}</p>
+                          </div>
+                        </div>
+                        <span className="ml-3 flex-shrink-0 bg-blue-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                          {dm.count}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
-      <h2 className="text-xl font-semibold mt-6 mb-2">
-        Rejected Change Requests
-      </h2>
-      <ul className="space-y-2">
-        {rejections.map((rejection) => (
-          <li key={rejection.id} className="p-4 border rounded-md shadow">
-            <p className="text-lg">
-              {rejection.userName} raised a CR in{" "}
-              <strong>{rejection.groupName}</strong>
-            </p>
-            <p className="text-red-500 font-semibold">{rejection.message}</p>
-            <Link
-              href={`/confirm-changes/${rejection.groupId}`}
-              className="mt-2 inline-block text-blue-500 hover:underline"
-            >
-              View Changes
-            </Link>
-          </li>
-        ))}
-      </ul>
+            {notifications.length > 0 && (
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
+                  Change Requests
+                </h2>
+                <ul className="space-y-2">
+                  {notifications.map((n) => (
+                    <li
+                      key={n.id}
+                      className="p-4 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm flex items-start justify-between gap-3 flex-wrap"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-800 dark:text-gray-200">
+                          <span className="font-medium">{n.userName}</span> raised a CR in{" "}
+                          <span className="font-medium">{n.groupName}</span>
+                        </p>
+                      </div>
+                      <Link
+                        href={`/confirm-changes/${n.groupId}`}
+                        className="text-xs font-medium text-blue-500 hover:underline flex-shrink-0"
+                      >
+                        Review →
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {rejections.length > 0 && (
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
+                  Rejected Change Requests
+                </h2>
+                <ul className="space-y-2">
+                  {rejections.map((r) => (
+                    <li
+                      key={r.id}
+                      className="p-4 rounded-xl bg-white dark:bg-gray-900 border border-red-100 dark:border-red-900/30 shadow-sm"
+                    >
+                      <p className="text-sm text-gray-800 dark:text-gray-200">
+                        <span className="font-medium">{r.userName}</span> raised a CR in{" "}
+                        <span className="font-medium">{r.groupName}</span>
+                      </p>
+                      <p className="text-xs text-red-500 mt-1">{r.message}</p>
+                      <Link
+                        href={`/confirm-changes/${r.groupId}`}
+                        className="text-xs font-medium text-blue-500 hover:underline mt-2 inline-block"
+                      >
+                        View Changes →
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

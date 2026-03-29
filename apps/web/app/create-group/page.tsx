@@ -93,8 +93,8 @@ export default function CreateGroup() {
     icon: React.ReactNode,
     imageSrc: string,
   ) => (
-    <div className="mb-6">
-      <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+    <div className="mb-4">
+      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5 flex items-center">
         {label}
         {icon}
         <FaInfoCircle
@@ -107,20 +107,20 @@ export default function CreateGroup() {
         type="text"
         value={value}
         onChange={onChange}
-        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
         placeholder={placeholder}
       />
     </div>
   );
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-100">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-center mb-6">Create Group</h1>
+    <div className="min-h-[calc(100vh-56px)] bg-gray-50 dark:bg-gray-950 px-4 py-8 sm:py-10">
+      <div className="w-full max-w-md mx-auto bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm p-6">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-5">Create Group</h1>
 
         {showNote && (
-          <div className="bg-yellow-100 p-4 border border-yellow-300 rounded-md mb-6">
-            <p className="text-sm text-yellow-800">
+          <div className="bg-amber-50 dark:bg-amber-900/20 p-3 border border-amber-200 dark:border-amber-700 rounded-lg mb-5">
+            <p className="text-xs text-amber-800 dark:text-amber-300">
               Please ensure all details are valid. Make sure the Group Name
               matches the github repo name. The owner name must be correct, and
               all other details must be accurate for everything to work
@@ -128,14 +128,14 @@ export default function CreateGroup() {
             </p>
             <button
               onClick={() => setShowNote(false)}
-              className="mt-2 p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition duration-300"
+              className="mt-2 px-3 py-1.5 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition"
             >
-              Got It
+              Got it
             </button>
           </div>
         )}
 
-        <form onSubmit={handleCreateGroup} className="space-y-6">
+        <form onSubmit={handleCreateGroup} className="space-y-1">
           {renderInput(
             "Repo Name:",
             groupName,
@@ -171,7 +171,7 @@ export default function CreateGroup() {
 
           <button
             type="submit"
-            className="w-full p-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition duration-300"
+            className="w-full py-2.5 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition mt-2"
           >
             Create Group
           </button>
