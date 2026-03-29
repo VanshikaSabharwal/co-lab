@@ -5,137 +5,271 @@ import Express from "express";
 const app = Express();
 const port = 8080;
 
-app.use(Express.json());
+// ── Allowed origins (set WS_ALLOWED_ORIGINS in your .env) ──────────────────
+const ALLOWED_ORIGINS = process.env.WS_ALLOWED_ORIGINS
+  ? process.env.WS_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : ["http://localhost:3000"];
 
-const server = http.createServer(app);
-const wss = new WebSocketServer({
-  server,
-  path: "/ws", // Add this to handle /ws path
+// ── Per-connection message rate limiting ────────────────────────────────────
+const MAX_MESSAGES_PER_SECOND = 10;
+const MAX_MESSAGE_SIZE_BYTES = 8_000; // 8KB per message
+const MAX_CONNECTIONS_PER_IP = 5;
+
+// Track connection counts per IP to limit simultaneous connections
+const ipConnectionCount = new Map<string, number>();
+
+// ── Security middleware for Express ────────────────────────────────────────
+app.disable("x-powered-by"); // Don't leak Express version
+app.use(Express.json({ limit: "50kb" })); // Limit body size
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  next();
 });
 
-const groupClients = new Map();
-const individualClients = new Map();
+const server = http.createServer(app);
 
-// WebSocket connection handling
+const wss = new WebSocketServer({
+  server,
+  path: "/ws",
+
+  // Validate origin before the WebSocket handshake completes
+  verifyClient: ({ origin, req }, callback) => {
+    const clientIP =
+      (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+      req.socket.remoteAddress ||
+      "unknown";
+
+    // ── Origin check (prevents WebSocket hijacking from other sites) ────────
+    if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+      console.warn(`🚫 Rejected WS connection from unauthorized origin: ${origin}`);
+      callback(false, 403, "Forbidden");
+      return;
+    }
+
+    // ── Per-IP connection limit ─────────────────────────────────────────────
+    const currentCount = ipConnectionCount.get(clientIP) || 0;
+    if (currentCount >= MAX_CONNECTIONS_PER_IP) {
+      console.warn(`🚫 Too many connections from IP: ${clientIP}`);
+      callback(false, 429, "Too Many Connections");
+      return;
+    }
+
+    ipConnectionCount.set(clientIP, currentCount + 1);
+    callback(true);
+  },
+});
+
+const groupClients = new Map<string, Map<string, WebSocket>>();
+const individualClients = new Map<string, WebSocket>();
+
+// ── Server-side heartbeat (detects and removes zombie connections) ───────────
+// Many proxies/load balancers kill idle TCP connections after 60s.
+// Ping every 30s; terminate any client that doesn't pong back.
+const wsIsAlive = new Map<WebSocket, boolean>();
+
+const serverHeartbeat = setInterval(() => {
+  wss.clients.forEach((client) => {
+    if (!wsIsAlive.get(client)) {
+      client.terminate();
+      return;
+    }
+    wsIsAlive.set(client, false);
+    client.ping();
+  });
+}, 30_000);
+
+wss.on("close", () => clearInterval(serverHeartbeat));
+
 wss.on("connection", (ws, req) => {
-  console.log("✅ New WebSocket connection");
+  const clientIP =
+    (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+    req.socket.remoteAddress ||
+    "unknown";
 
   const urlParams = new URLSearchParams(req.url?.split("?")[1] || "");
   const userId = urlParams.get("userId");
   const groupId = urlParams.get("groupId");
 
   if (!userId) {
-    console.log("❌ No userId provided, closing connection");
     ws.close(1008, "UserId required");
     return;
   }
 
-  // Store the connection
-  individualClients.set(userId, ws);
-  console.log(`✅ Client connected: ${userId}`);
+  // ── Basic userId validation (alphanumeric + hyphens only) ──────────────
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(userId)) {
+    ws.close(1008, "Invalid userId format");
+    return;
+  }
 
-  // Send connection confirmation
+  // Track liveness for heartbeat
+  wsIsAlive.set(ws, true);
+  ws.on("pong", () => wsIsAlive.set(ws, true));
+
+  individualClients.set(userId, ws);
+
+  if (groupId && /^[a-zA-Z0-9_-]{1,64}$/.test(groupId)) {
+    if (!groupClients.has(groupId)) {
+      groupClients.set(groupId, new Map());
+    }
+    groupClients.get(groupId)!.set(userId, ws);
+  }
+
   ws.send(
     JSON.stringify({
       type: "connection_established",
-      message: "WebSocket connection established successfully",
-      userId: userId,
+      message: "Connected successfully",
+      userId,
     }),
   );
 
-  // WebSocket message handling
-  ws.on("message", (message) => {
-    try {
-      console.log("📨 Received message:", message.toString());
-      const parsedMessage = JSON.parse(message.toString());
+  // ── Per-connection rate limiting ────────────────────────────────────────
+  let messageCount = 0;
+  const rateLimitWindow = setInterval(() => {
+    messageCount = 0;
+  }, 1000);
 
-      // Validate message structure
-      if (!parsedMessage.recipientId || !parsedMessage.content) {
-        console.log("❌ Invalid message format");
-        ws.send(
-          JSON.stringify({
-            type: "error",
-            message: "Invalid message format",
-          }),
-        );
+  ws.on("message", (rawMessage, isBinary) => {
+    // Block binary frames
+    if (isBinary) {
+      ws.send(JSON.stringify({ type: "error", message: "Binary messages not supported" }));
+      return;
+    }
+
+    // ── Message size check ────────────────────────────────────────────────
+    const messageStr = rawMessage.toString();
+    if (messageStr.length > MAX_MESSAGE_SIZE_BYTES) {
+      ws.send(JSON.stringify({ type: "error", message: "Message too large" }));
+      return;
+    }
+
+    // ── Rate limit per connection ─────────────────────────────────────────
+    messageCount++;
+    if (messageCount > MAX_MESSAGES_PER_SECOND) {
+      ws.send(JSON.stringify({ type: "error", message: "Rate limit exceeded" }));
+      return;
+    }
+
+    try {
+      const parsedMessage = JSON.parse(messageStr);
+
+      // ── Application-level ping (client keepalive) ─────────────────────
+      if (parsedMessage.type === "ping") {
+        ws.send(JSON.stringify({ type: "pong" }));
         return;
       }
 
-      // One-to-one message sending
-      const recipientWs = individualClients.get(parsedMessage.recipientId);
-
-      if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
-        console.log(
-          `📤 Sending message to recipient: ${parsedMessage.recipientId}`,
-        );
-        recipientWs.send(
-          JSON.stringify({
-            ...parsedMessage,
-            timestamp: Date.now(),
-          }),
-        );
-
-        // Send delivery confirmation to sender
-        ws.send(
-          JSON.stringify({
-            type: "message_delivered",
-            messageId: parsedMessage.timestamp,
-            recipientId: parsedMessage.recipientId,
-          }),
-        );
-      } else {
-        console.log(`❌ Recipient ${parsedMessage.recipientId} not connected`);
-        ws.send(
-          JSON.stringify({
-            type: "error",
-            message: `Recipient ${parsedMessage.recipientId} is not connected`,
-          }),
-        );
+      // ── Read receipt: recipient tells sender messages were read ────────
+      if (parsedMessage.type === "read_receipt") {
+        const senderWs = individualClients.get(parsedMessage.senderId);
+        if (senderWs && senderWs.readyState === WebSocket.OPEN) {
+          senderWs.send(JSON.stringify({
+            type: "read_receipt",
+            chatId: parsedMessage.chatId,
+            readBy: userId,
+          }));
+        }
+        return;
       }
-    } catch (error) {
-      console.error("❌ Error processing message:", error);
-      ws.send(
-        JSON.stringify({
-          type: "error",
-          message: "Error processing message",
-        }),
-      );
+
+      // ── Validate required fields ──────────────────────────────────────
+      if (typeof parsedMessage.content !== "string" || parsedMessage.content.trim() === "") {
+        ws.send(JSON.stringify({ type: "error", message: "Invalid message format" }));
+        return;
+      }
+
+      // ── Sanitize content length ───────────────────────────────────────
+      if (parsedMessage.content.length > 4000) {
+        ws.send(JSON.stringify({ type: "error", message: "Message content too long" }));
+        return;
+      }
+
+      // One-to-one messaging
+      if (parsedMessage.recipientId) {
+        const recipientWs = individualClients.get(parsedMessage.recipientId);
+        if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
+          recipientWs.send(
+            JSON.stringify({
+              chatId: parsedMessage.chatId,
+              senderId: userId,
+              recipientId: parsedMessage.recipientId,
+              content: parsedMessage.content,
+              timestamp: parsedMessage.timestamp || Date.now(),
+            }),
+          );
+          ws.send(
+            JSON.stringify({
+              type: "message_delivered",
+              chatId: parsedMessage.chatId,
+              timestamp: parsedMessage.timestamp,
+            }),
+          );
+        } else {
+          ws.send(
+            JSON.stringify({
+              type: "error",
+              message: "Recipient not connected",
+            }),
+          );
+        }
+        return;
+      }
+
+      // Group messaging — broadcast to all members of the group
+      if (parsedMessage.groupId) {
+        const members = groupClients.get(parsedMessage.groupId);
+        if (members) {
+          const outbound = JSON.stringify({
+            id: parsedMessage.id,
+            senderId: userId,
+            senderName: parsedMessage.senderName,
+            groupId: parsedMessage.groupId,
+            content: parsedMessage.content,
+            createdAt: Date.now(),
+          });
+          for (const [memberId, memberWs] of members.entries()) {
+            if (memberId !== userId && memberWs.readyState === WebSocket.OPEN) {
+              memberWs.send(outbound);
+            }
+          }
+        }
+      }
+    } catch {
+      ws.send(JSON.stringify({ type: "error", message: "Invalid JSON" }));
     }
   });
 
-  // Handle WebSocket disconnection
-  ws.on("close", (code, reason) => {
-    console.log(
-      `🔌 WebSocket connection closed for ${userId}:`,
-      code,
-      reason?.toString(),
-    );
+  ws.on("close", () => {
+    wsIsAlive.delete(ws);
 
-    // Remove the client from individual tracking
-    if (individualClients.get(userId) === ws) {
-      individualClients.delete(userId);
-      console.log(`✅ Client ${userId} removed from tracking`);
+    // Decrement IP connection count
+    const count = ipConnectionCount.get(clientIP) || 1;
+    if (count <= 1) {
+      ipConnectionCount.delete(clientIP);
+    } else {
+      ipConnectionCount.set(clientIP, count - 1);
     }
 
-    // Remove from groups
+    clearInterval(rateLimitWindow);
+
+    if (individualClients.get(userId) === ws) {
+      individualClients.delete(userId);
+    }
     for (const [gId, clients] of groupClients.entries()) {
       if (clients.has(userId)) {
         clients.delete(userId);
-        console.log(`✅ Client ${userId} removed from group ${gId}`);
-        if (clients.size === 0) {
-          groupClients.delete(gId);
-        }
+        if (clients.size === 0) groupClients.delete(gId);
       }
     }
   });
 
   ws.on("error", (error) => {
-    console.error(`❌ WebSocket error for ${userId}:`, error);
+    console.error(`WebSocket error for ${userId}:`, error.message);
   });
 });
 
-// Health check endpoint
-app.get("/health", (req, res) => {
+// ── Health check (internal use only — protect this in production) ──────────
+app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
     connectedClients: individualClients.size,
@@ -143,22 +277,8 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Get connected clients
-app.get("/clients", (req, res) => {
-  res.json({
-    connectedClients: Array.from(individualClients.keys()),
-    activeGroups: Array.from(groupClients.keys()).map((groupId) => ({
-      groupId,
-      members: Array.from(groupClients.get(groupId).keys()),
-    })),
-  });
-});
-
-// Start the HTTP server
 server.listen(port, () => {
   console.log(`🚀 WebSocket server running on port ${port}`);
-  console.log(`📡 WebSocket endpoint: ws://localhost:${port}/ws`);
-  console.log(`🏥 Health check: http://localhost:${port}/health`);
 });
 
 export { wss, individualClients, groupClients };
