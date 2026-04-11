@@ -107,7 +107,8 @@ export function middleware(request: NextRequest) {
   // ── Validate Content-Type on mutation requests ────────────────────────────
   if (
     (method === "POST" || method === "PUT" || method === "PATCH") &&
-    pathname.startsWith("/api/")
+    pathname.startsWith("/api/") &&
+    !pathname.startsWith("/api/auth/") // NextAuth uses application/x-www-form-urlencoded internally
   ) {
     const contentType = request.headers.get("content-type") || "";
     if (!contentType.includes("application/json") && !contentType.includes("multipart/form-data")) {
