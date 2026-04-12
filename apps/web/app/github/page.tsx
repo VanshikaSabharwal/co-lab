@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { signIn, useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import { FaGithub } from "react-icons/fa";
+import PageTour from "../components/PageTour";
 
 type GithubRepo = {
   id: number;
@@ -94,9 +95,39 @@ export default function GithubGroupCreateLogin() {
         </div>
       ) : (
         <div className="w-full max-w-lg mx-auto bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm p-6">
+          <PageTour
+            storageKey="ko-lab-tour-github"
+            steps={[
+              {
+                id: "github-welcome",
+                text: `<strong>Create a Group</strong><br/><br/>
+                  Link a GitHub repo to a Ko-Lab group so your team can collaborate with real-time code editing and chat.`,
+              },
+              {
+                id: "github-name",
+                attachTo: { element: "#tour-github-name", on: "bottom" },
+                text: `<strong>Group name & repo</strong><br/><br/>
+                  Enter a name for your group, then pick the GitHub repo you want to link it to.`,
+              },
+              {
+                id: "github-ssh",
+                attachTo: { element: "#tour-github-ssh", on: "top" },
+                text: `<strong>SSH public key</strong><br/><br/>
+                  Run the shell command shown here to generate a key, add it to GitHub, then paste the public key above.
+                  Click ℹ️ for step-by-step instructions.`,
+              },
+              {
+                id: "github-create",
+                attachTo: { element: "#tour-github-create", on: "top" },
+                text: `<strong>Create the group</strong><br/><br/>
+                  Once all fields are filled, hit <em>Create Group</em> and your group will be ready.`,
+              },
+            ]}
+          />
           <h2 className="text-xl font-bold mb-5 text-gray-900 dark:text-white">Create Group</h2>
 
           {/* GROUP NAME INPUT */}
+          <div id="tour-github-name">
           <input
             type="text"
             value={groupName}
@@ -116,8 +147,9 @@ export default function GithubGroupCreateLogin() {
               </option>
             ))}
           </select>
+          </div>
 
-          <h3 className="text-sm font-semibold mt-5 mb-1 flex items-center gap-2 text-gray-900 dark:text-white">
+          <h3 id="tour-github-ssh" className="text-sm font-semibold mt-5 mb-1 flex items-center gap-2 text-gray-900 dark:text-white">
             Enter SSH Public Key
             <button
               onClick={() => setShowInfo(true)}
@@ -210,6 +242,7 @@ cat ~/.ssh/id_ed25519.pub`}
           </a>
 
           <button
+            id="tour-github-create"
             onClick={handleCreateGroup}
             className="mt-3 w-full py-2.5 text-sm font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg transition"
           >

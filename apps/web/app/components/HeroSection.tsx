@@ -11,6 +11,7 @@ import Footer from "@repo/ui/footer";
 import Cookies from "js-cookie";
 import toast from "react-hot-toast";
 import demoTestimonal from "../../../../data/demo-testimonial.json";
+import SiteTour from "./SiteTour";
 
 interface GuestData {
   guestId: string;
@@ -39,11 +40,11 @@ const HeroSection = () => {
     const fetchTestimonials = async () => {
       try {
         const response = await fetch("/api/testimonial-card");
-        let data: typeof demoTestimonal = [];
+        let fetched: typeof demoTestimonal = [];
         if (response.ok) {
-          const data = await response.json();
+          fetched = await response.json();
         }
-        setTestimonials([...demoTestimonal, ...data]);
+        setTestimonials([...demoTestimonal, ...fetched]);
       } catch (err) {
         console.error("Failed to fetch testimonials:", err);
       }
@@ -102,6 +103,7 @@ const HeroSection = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white dark:from-gray-900 dark:to-black text-gray-900 dark:text-white">
+      <SiteTour />
 
       {/* Hero */}
       <section className="px-4 sm:px-6 lg:px-8 pt-14 pb-10 sm:pt-20 sm:pb-16 max-w-5xl mx-auto text-center">
@@ -123,7 +125,7 @@ const HeroSection = () => {
             Seamless collaboration with real-time coding, one-on-one and group chat — all in one platform.
           </p>
 
-          <div className="flex flex-wrap items-center justify-center gap-3">
+          <div id="tour-cta" className="flex flex-wrap items-center justify-center gap-3">
             {session || guestData ? (
               <Link
                 href="/chat-room"
@@ -161,6 +163,7 @@ const HeroSection = () => {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.15 }}
+          id="tour-features"
           className="grid grid-cols-1 sm:grid-cols-3 gap-4"
         >
           <div className="p-5 rounded-xl bg-white dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 hover:border-blue-400 transition text-center">
@@ -188,7 +191,7 @@ const HeroSection = () => {
       </section>
 
       {/* Testimonials */}
-      <section className="py-10 sm:py-14 border-t border-gray-100 dark:border-gray-800">
+      <section id="tour-testimonials" className="py-10 sm:py-14 border-t border-gray-100 dark:border-gray-800">
         <h2 className="text-xl sm:text-2xl font-bold text-center mb-8">
           What people are saying
         </h2>

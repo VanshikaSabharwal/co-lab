@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import PageTour from "../components/PageTour";
 
 interface NotificationsType {
   id: string;
@@ -93,6 +94,34 @@ const NotificationsPage = () => {
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-gray-50 dark:bg-gray-950 px-4 py-8 sm:py-10">
+      <PageTour
+        storageKey="ko-lab-tour-notifications"
+        steps={[
+          {
+            id: "notif-welcome",
+            text: `<strong>Notifications</strong><br/><br/>
+              Stay up to date with everything that matters — unread DMs, code review requests, and rejected change requests all land here.`,
+          },
+          {
+            id: "notif-dm",
+            attachTo: { element: "#tour-notif-dm", on: "bottom" },
+            text: `<strong>Unread messages</strong><br/><br/>
+              Direct messages you haven't read yet show up here with a count badge. Click any to open the chat.`,
+          },
+          {
+            id: "notif-cr",
+            attachTo: { element: "#tour-notif-cr", on: "bottom" },
+            text: `<strong>Change requests</strong><br/><br/>
+              When a teammate raises a CR in one of your groups, it appears here. Click <em>Review →</em> to accept or reject it.`,
+          },
+          {
+            id: "notif-rejected",
+            attachTo: { element: "#tour-notif-rejected", on: "bottom" },
+            text: `<strong>Rejected change requests</strong><br/><br/>
+              CRs that were rejected are listed here with the reason. You can view the diff and resubmit if needed.`,
+          },
+        ]}
+      />
       <div className="max-w-2xl mx-auto">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Notifications</h1>
 
@@ -103,7 +132,7 @@ const NotificationsPage = () => {
         ) : (
           <div className="space-y-6">
             {dmNotifications.length > 0 && (
-              <div>
+              <div id="tour-notif-dm">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
                   Unread Messages
                 </h2>
@@ -134,7 +163,7 @@ const NotificationsPage = () => {
             )}
 
             {notifications.length > 0 && (
-              <div>
+              <div id="tour-notif-cr">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
                   Change Requests
                 </h2>
@@ -163,7 +192,7 @@ const NotificationsPage = () => {
             )}
 
             {rejections.length > 0 && (
-              <div>
+              <div id="tour-notif-rejected">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
                   Rejected Change Requests
                 </h2>

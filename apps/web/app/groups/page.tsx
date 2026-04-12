@@ -2,6 +2,7 @@ import prisma from "../lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../lib/auth";
 import Link from "next/link";
+import PageTour from "../components/PageTour";
 
 export default async function MyGroups() {
   const session = await getServerSession(authOptions);
@@ -30,11 +31,42 @@ export default async function MyGroups() {
 
   return (
     <div className="min-h-[calc(100vh-56px)] bg-gray-50 dark:bg-gray-950 px-4 py-8 sm:py-10">
+      <PageTour
+        storageKey="ko-lab-tour-groups"
+        steps={[
+          {
+            id: "groups-welcome",
+            text: `<strong>My Groups</strong><br/><br/>
+              All the groups you own or are a member of are listed here.`,
+          },
+          {
+            id: "groups-list",
+            attachTo: { element: "#tour-groups-list", on: "top" },
+            text: `<strong>Group cards</strong><br/><br/>
+              Each card shows the group name, its linked GitHub repo, and whether you're the owner or a member.
+              Click <em>Open group chat →</em> to jump straight into that group's chat.`,
+          },
+          {
+            id: "groups-create",
+            attachTo: { element: "#tour-groups-create", on: "top" },
+            text: `<strong>Create a group</strong><br/><br/>
+              Head to the <em>Create Group</em> page to start a new group linked to one of your GitHub repos.`,
+          },
+        ]}
+      />
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white mb-6">My Groups</h1>
+        <div id="tour-groups-create" className="flex items-center justify-between mb-6">
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">My Groups</h1>
+          <Link
+            href="/github"
+            className="text-xs font-medium text-blue-500 hover:underline"
+          >
+            + Create group
+          </Link>
+        </div>
 
         {groups.length > 0 ? (
-          <ul className="space-y-3">
+          <ul id="tour-groups-list" className="space-y-3">
             {groups.map((group) => (
               <li
                 key={group.id}

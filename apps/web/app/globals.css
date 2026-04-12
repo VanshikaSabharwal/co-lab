@@ -22,3 +22,61 @@
 .animate-marquee:hover {
   animation-play-state: paused;
 }
+
+/* ── Shepherd.js tour overrides ─────────────────────────────────────── */
+.shepherd-element {
+  max-width: 340px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+.shepherd-content {
+  border-radius: 12px;
+  overflow: hidden;
+}
+.shepherd-header {
+  display: none; /* we embed title in the text */
+}
+.shepherd-text {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  padding: 1.25rem 1.25rem 0.5rem;
+  color: inherit;
+}
+.shepherd-text strong {
+  font-size: 1rem;
+}
+.shepherd-footer {
+  padding: 0.75rem 1.25rem 1rem;
+  gap: 0.5rem;
+}
+.shepherd-button {
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.4rem 1rem;
+  transition: opacity 0.15s;
+}
+.shepherd-button:not(.shepherd-button-secondary) {
+  background: linear-gradient(to right, #2563eb, #4f46e5);
+  color: #fff;
+}
+.shepherd-button:not(.shepherd-button-secondary):hover {
+  opacity: 0.88;
+}
+.shepherd-button-secondary {
+  background: transparent;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+.shepherd-button-secondary:hover {
+  background: #f3f4f6;
+}
+.shepherd-cancel-icon {
+  opacity: 0.45;
+}
+.shepherd-cancel-icon:hover {
+  opacity: 1;
+}
+.shepherd-modal-overlay-container {
+  opacity: 0.45 !important;
+}

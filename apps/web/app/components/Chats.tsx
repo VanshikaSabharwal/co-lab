@@ -6,6 +6,7 @@ import FriendSearch from "../components/FriendSearch";
 import Notifications from "./Notifications";
 import { motion } from "framer-motion";
 import GroupChat from "../group/[groupId]/GroupChat";
+import PageTour from "./PageTour";
 
 interface Group {
   ownerName: string;
@@ -69,9 +70,44 @@ export default function Component() {
 
   return (
     <div className="flex flex-col md:flex-row h-[calc(100vh-56px)] bg-gradient-to-br from-gray-100 to-white dark:from-gray-900 dark:to-black text-gray-900 dark:text-white overflow-hidden">
+      <PageTour
+        storageKey="ko-lab-tour-chatroom"
+        steps={[
+          {
+            id: "chatroom-welcome",
+            text: `<strong>Welcome to the Chat Room!</strong><br/><br/>
+              This is your collaboration hub — find contacts, join group chats, and see notifications all in one place.`,
+          },
+          {
+            id: "chatroom-profile",
+            attachTo: { element: "#tour-chatroom-profile", on: "right" },
+            text: `<strong>Your profile & notifications</strong><br/><br/>
+              See your name, email and any pending notifications at a glance.`,
+          },
+          {
+            id: "chatroom-search",
+            attachTo: { element: "#tour-chatroom-search", on: "right" },
+            text: `<strong>Find a contact</strong><br/><br/>
+              Search for a friend by phone number to start a one-on-one chat.`,
+          },
+          {
+            id: "chatroom-groups",
+            attachTo: { element: "#tour-chatroom-groups", on: "right" },
+            text: `<strong>Your groups</strong><br/><br/>
+              Click any group to open its chat. On mobile you'll be taken to the group page directly.`,
+          },
+          {
+            id: "chatroom-area",
+            attachTo: { element: "#tour-chatroom-area", on: "left" },
+            text: `<strong>Chat area</strong><br/><br/>
+              Select a group from the sidebar and messages will appear here in real time.`,
+          },
+        ]}
+      />
+
       {/* Sidebar */}
       <div className="w-full md:w-1/4 p-4 bg-gray-200 dark:bg-gray-800 bg-opacity-50 border-b md:border-r border-gray-300 dark:border-gray-700 overflow-y-auto">
-        <div className="flex flex-col space-y-4">
+        <div id="tour-chatroom-profile" className="flex flex-col space-y-4">
           <Notifications />
           <div className="text-sm">
             <p>
@@ -84,9 +120,11 @@ export default function Component() {
         </div>
 
         <h1 className="text-2xl font-bold text-gray-700 dark:text-gray-300 my-6">Contacts</h1>
-        <FriendSearch />
+        <div id="tour-chatroom-search">
+          <FriendSearch />
+        </div>
 
-        <div className="mt-8">
+        <div id="tour-chatroom-groups" className="mt-8">
           <h2 className="text-xl font-semibold text-gray-600 dark:text-gray-400 mb-4">
             My Groups:
           </h2>
@@ -113,6 +151,7 @@ export default function Component() {
 
       {/* Chat Area */}
       <motion.div
+        id="tour-chatroom-area"
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5 }}
