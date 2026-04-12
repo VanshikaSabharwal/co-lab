@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Shepherd from "shepherd.js";
+import type { Tour } from "shepherd.js";
 import "shepherd.js/dist/css/shepherd.css";
 
 export interface TourStep {
@@ -16,7 +17,7 @@ interface PageTourProps {
   delay?: number;
 }
 
-const navButtons = (tour: Shepherd.Tour) => [
+const navButtons = (tour: Tour) => [
   {
     text: "Skip",
     secondary: true,
