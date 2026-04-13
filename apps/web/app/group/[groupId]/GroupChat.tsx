@@ -344,9 +344,9 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
             {groupDetails?.groupName?.[0]?.toUpperCase() ?? "G"}
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+          <div className="min-w-0 overflow-hidden">
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">
                 {groupDetails?.groupName}
               </p>
               {isOwner && (

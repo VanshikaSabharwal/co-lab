@@ -200,7 +200,7 @@ export default function Component() {
                   <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
                     {group.groupName?.[0]?.toUpperCase() ?? "G"}
                   </div>
-                  <div className="min-w-0">
+                  <div className="flex-1 min-w-0 overflow-hidden">
                     <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{group.groupName}</p>
                     <a
                       href={`https://github.com/${group.ownerName}/${group.githubRepo}`}
