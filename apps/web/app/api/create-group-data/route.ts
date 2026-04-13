@@ -165,10 +165,16 @@ export async function GET(req: Request) {
       );
     }
 
-    const decryptedAccessToken = decrypt(groupDetails.githubAccessToken);
-    const decryptedSshKey = groupDetails.sshKey
-      ? decrypt(groupDetails.sshKey)
-      : null;
+    let decryptedAccessToken: string;
+    let decryptedSshKey: string | null = null;
+    try {
+      decryptedAccessToken = decrypt(groupDetails.githubAccessToken);
+      decryptedSshKey = groupDetails.sshKey ? decrypt(groupDetails.sshKey) : null;
+    } catch {
+      // Token may be stored unencrypted (legacy data) — return as-is
+      decryptedAccessToken = groupDetails.githubAccessToken;
+      decryptedSshKey = groupDetails.sshKey ?? null;
+    }
 
     // Return the group details, including the decrypted tokens
     return NextResponse.json(

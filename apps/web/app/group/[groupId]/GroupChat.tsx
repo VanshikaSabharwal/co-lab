@@ -154,7 +154,13 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         try {
           const response = await fetch(`/api/create-group-data?group=${group}`);
           const data = await response.json();
-          setGroupDetails(data);
+          console.log("[GroupDetails]", response.status, data);
+          if (!response.ok) {
+            console.error("Failed to fetch group details:", data);
+            toast.error(data.error ?? "Failed to fetch group details");
+          } else {
+            setGroupDetails(data);
+          }
         } catch (err) {
           console.error("Error fetching details:", err);
           toast.error("Failed to fetch group details");
