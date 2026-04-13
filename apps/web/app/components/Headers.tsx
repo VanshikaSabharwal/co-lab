@@ -3,7 +3,9 @@
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { Sun, Moon, Github } from "lucide-react";
+import { Sun, Moon, Github, User } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 
 const Header = () => {
   const { data: session, status } = useSession();
@@ -46,12 +48,33 @@ const Header = () => {
 
             {/* Auth Buttons */}
             {status === "authenticated" ? (
-              <button
-                onClick={() => signOut()}
-                className="text-sm font-medium px-4 py-1.5 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-200"
-              >
-                Sign out
-              </button>
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/profile"
+                  className="flex items-center justify-center w-8 h-8 rounded-full overflow-hidden border border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-blue-500 transition"
+                  title="Profile"
+                >
+                  {session?.user?.image ? (
+                    <Image
+                      src={session.user.image}
+                      alt="Profile"
+                      width={32}
+                      height={32}
+                      className="object-cover w-full h-full"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                      <User className="w-4 h-4 text-gray-500" />
+                    </div>
+                  )}
+                </Link>
+                <button
+                  onClick={() => signOut()}
+                  className="text-sm font-medium px-4 py-1.5 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-200"
+                >
+                  Sign out
+                </button>
+              </div>
             ) : (
               <div className="flex items-center gap-2">
                 <button

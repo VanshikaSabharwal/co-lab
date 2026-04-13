@@ -38,7 +38,9 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.accessToken = account.access_token!;
         token.provider = account.provider!;
-        token.githubAccessToken = account.access_token!;
+        if (account.provider === "github") {
+          token.githubAccessToken = account.access_token!;
+        }
       }
       return token;
     },

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { signIn, useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import { FaGithub } from "react-icons/fa";
+import { ChevronDown, Search, X } from "lucide-react";
 import PageTour from "../components/PageTour";
 
 type GithubRepo = {
@@ -23,17 +24,39 @@ export default function GithubGroupCreateLogin() {
   const [sshToken, setSshToken] = useState("");
   const [groupName, setGroupName] = useState("");
   const [showInfo, setShowInfo] = useState(false);
+  const [repoOpen, setRepoOpen] = useState(false);
+  const [repoSearch, setRepoSearch] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setRepoOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  const filteredRepos = repos.filter((r) =>
+    r.full_name.toLowerCase().includes(repoSearch.toLowerCase())
+  );
 
   const fetchRepos = async () => {
-    if (!session?.user?.accessToken) return;
+    if (!session?.user?.githubAccessToken) return;
 
     try {
       const res = await fetch("https://api.github.com/user/repos", {
-        headers: { Authorization: `Bearer ${session.user.accessToken}` },
+        headers: { Authorization: `Bearer ${session.user.githubAccessToken}` },
       });
 
+      if (!res.ok) {
+        toast.error("Failed to authenticate with GitHub. Please sign in again.");
+        return;
+      }
+
       const data = await res.json();
-      setRepos(data);
+      setRepos(Array.isArray(data) ? data : []);
     } catch {
       toast.error("Failed to load repos");
     }
@@ -61,7 +84,7 @@ export default function GithubGroupCreateLogin() {
           githubRepo: selectedRepo.name,
           githubOwnerName: ownerName,
           githubRepoUrl: selectedRepo.html_url,
-          githubAccessToken: session?.user?.accessToken,
+          githubAccessToken: session?.user?.githubAccessToken,
           ownerId: session?.user?.id,
           sshKey: sshToken,
         }),
@@ -91,6 +114,18 @@ export default function GithubGroupCreateLogin() {
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-lg hover:opacity-90 transition"
           >
             <FaGithub size={16} /> Login with GitHub to Create Group
+          </button>
+        </div>
+      ) : session.user.provider !== "github" ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            You need to connect your GitHub account to create a group.
+          </p>
+          <button
+            onClick={() => signIn("github")}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-lg hover:opacity-90 transition"
+          >
+            <FaGithub size={16} /> Connect GitHub Account
           </button>
         </div>
       ) : (
@@ -136,17 +171,66 @@ export default function GithubGroupCreateLogin() {
             className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg mb-4 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
           />
 
-          <select
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-            onChange={(e) => setSelectedRepo(JSON.parse(e.target.value))}
-          >
-            <option>Select a repo</option>
-            {repos.map((repo) => (
-              <option key={repo.id} value={JSON.stringify(repo)}>
-                {repo.full_name}
-              </option>
-            ))}
-          </select>
+          {/* CUSTOM REPO DROPDOWN */}
+          <div ref={dropdownRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setRepoOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+            >
+              <span className={selectedRepo ? "" : "text-gray-400"}>
+                {selectedRepo ? selectedRepo.full_name : "Select a repo"}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${repoOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {repoOpen && (
+              <div className="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden">
+                {/* Search */}
+                <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+                  <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={repoSearch}
+                    onChange={(e) => setRepoSearch(e.target.value)}
+                    placeholder="Search repos..."
+                    className="flex-1 text-sm bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
+                  />
+                  {repoSearch && (
+                    <button onClick={() => setRepoSearch("")}>
+                      <X className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
+                    </button>
+                  )}
+                </div>
+
+                {/* List */}
+                <ul className="max-h-52 overflow-y-auto">
+                  {filteredRepos.length === 0 ? (
+                    <li className="px-3 py-3 text-sm text-gray-400 text-center">No repos found</li>
+                  ) : (
+                    filteredRepos.map((repo) => (
+                      <li
+                        key={repo.id}
+                        onClick={() => {
+                          setSelectedRepo(repo);
+                          setRepoOpen(false);
+                          setRepoSearch("");
+                        }}
+                        className={`px-3 py-2.5 text-sm cursor-pointer transition-colors ${
+                          selectedRepo?.id === repo.id
+                            ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium"
+                            : "text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                        }`}
+                      >
+                        {repo.full_name}
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+            )}
+          </div>
           </div>
 
           <h3 id="tour-github-ssh" className="text-sm font-semibold mt-5 mb-1 flex items-center gap-2 text-gray-900 dark:text-white">

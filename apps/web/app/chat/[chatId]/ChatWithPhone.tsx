@@ -74,13 +74,6 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerDownTime = useRef<number>(0);
 
-  useEffect(() => {
-    const handleOutsideClick = () => setActiveEmojiPicker(null);
-    if (activeEmojiPicker !== null) {
-      document.addEventListener("pointerdown", handleOutsideClick);
-    }
-    return () => document.removeEventListener("pointerdown", handleOutsideClick);
-  }, [activeEmojiPicker]);
 
   const handleMsgPointerDown = useCallback((idx: number) => {
     pointerDownTime.current = Date.now();
@@ -365,7 +358,7 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className={`flex flex-col h-[calc(100vh-56px)] ${chatBg} transition-colors duration-500`}>
+    <div className={`relative flex flex-col h-[calc(100vh-56px)] ${chatBg} transition-colors duration-500`}>
       {/* Header */}
       <div className="px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between relative">
         <div className="flex items-center gap-3">
@@ -379,8 +372,10 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-yellow-400 animate-pulse"}`} />
-          <span className="text-xs text-gray-400">{isConnected ? "Online" : "Reconnecting..."}</span>
+          <span
+            className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-yellow-400 animate-pulse"}`}
+            title={isConnected ? "Online" : "Reconnecting..."}
+          />
 
           {/* 3-dot menu */}
           <div className="relative" ref={menuRef}>
@@ -460,20 +455,6 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
 
                 <div className={`flex mb-2 ${isOwn ? "justify-end" : "justify-start"}`}>
                   <div className="relative max-w-xs sm:max-w-sm">
-                    {/* Emoji picker */}
-                    {activeEmojiPicker === index && (
-                      <div
-                        className={`absolute bottom-full mb-1 z-50 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 flex gap-1 p-1.5 ${isOwn ? "right-0" : "left-0"}`}
-                        onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        {EMOJIS.map((emoji) => (
-                          <button key={emoji} onClick={() => handleReact(index, emoji, userId)} className="text-lg hover:scale-125 transition-transform leading-none">
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
                     {/* Bubble */}
                     <div
                       className={`break-words px-3 py-2 rounded-2xl cursor-pointer select-none ${
@@ -535,6 +516,29 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Floating emoji picker — above the input, outside the scroll container */}
+      {activeEmojiPicker !== null && (
+        <div
+          className="flex justify-center py-2"
+          onClick={() => setActiveEmojiPicker(null)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-full shadow-xl border border-gray-200 dark:border-gray-700 flex gap-1 p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => handleReact(activeEmojiPicker, emoji, userId)}
+                className="text-xl hover:scale-125 transition-transform leading-none px-1"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div className="px-4 py-3 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 flex items-center gap-2">
