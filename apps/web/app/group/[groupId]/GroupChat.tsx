@@ -40,6 +40,18 @@ interface GroupDetails {
   groupName: string;
 }
 
+function sendBrowserNotification(title: string, body: string) {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem("notificationsEnabled") === "false") return;
+  if (Notification.permission === "granted") {
+    new Notification(title, { body, icon: "/favicon.ico" });
+  } else if (Notification.permission === "default") {
+    Notification.requestPermission().then((perm) => {
+      if (perm === "granted") new Notification(title, { body, icon: "/favicon.ico" });
+    });
+  }
+}
+
 const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const { data: session, status } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -213,6 +225,12 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
               createdAt: message.createdAt,
             },
           ]);
+          if (message.senderId !== senderId) {
+            sendBrowserNotification(
+              `${message.senderName ?? "Someone"} in ${groupDetails?.groupName ?? "a group"}`,
+              message.content
+            );
+          }
         };
 
         ws.onclose = () => {
@@ -343,10 +361,9 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         </div>
 
         <div className="flex items-center gap-3 flex-shrink-0">
-          <span
-            className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-yellow-400 animate-pulse"}`}
-            title={isConnected ? "Online" : "Reconnecting..."}
-          />
+          {isConnected && (
+            <span className="w-2 h-2 rounded-full bg-green-500" title="Online" />
+          )}
 
           {/* 3-dot menu */}
           <div className="relative" ref={menuRef}>

@@ -28,6 +28,18 @@ interface Message {
   isNew?: boolean; // true = arrived while offline, shown above divider
 }
 
+function sendBrowserNotification(title: string, body: string) {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem("notificationsEnabled") === "false") return;
+  if (Notification.permission === "granted") {
+    new Notification(title, { body, icon: "/favicon.ico" });
+  } else if (Notification.permission === "default") {
+    Notification.requestPermission().then((perm) => {
+      if (perm === "granted") new Notification(title, { body, icon: "/favicon.ico" });
+    });
+  }
+}
+
 const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
   const { data: session, status } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -252,7 +264,8 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
           if (message.chatId === incomingChatId) {
             if (!message.timestamp) message.timestamp = Date.now();
             setMessages((prev) => [...prev, { ...message, status: "read" as MessageStatus }]);
-            setNewMsgDividerIndex(null); // clear divider when actively chatting
+            setNewMsgDividerIndex(null);
+            sendBrowserNotification(recipientName || phone, message.content);
             // Send read receipt
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: "read_receipt", chatId: message.chatId, senderId: message.senderId }));
@@ -372,10 +385,9 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
         </div>
 
         <div className="flex items-center gap-3">
-          <span
-            className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-yellow-400 animate-pulse"}`}
-            title={isConnected ? "Online" : "Reconnecting..."}
-          />
+          {isConnected && (
+            <span className="w-2 h-2 rounded-full bg-green-500" title="Online" />
+          )}
 
           {/* 3-dot menu */}
           <div className="relative" ref={menuRef}>

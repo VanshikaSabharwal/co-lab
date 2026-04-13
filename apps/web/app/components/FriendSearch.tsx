@@ -2,41 +2,41 @@
 import Link from "next/link";
 import React, { useState } from "react";
 import { GrChat } from "react-icons/gr";
-import { useSession } from "next-auth/react";
+import { UserPlus, Check } from "lucide-react";
+import toast from "react-hot-toast";
 
 interface Friend {
   name: string;
   phone: string;
 }
 
-const FriendSearch = () => {
-  // const { data: session } = useSession();
+const FriendSearch = ({ onFriendAdded }: { onFriendAdded?: () => void }) => {
   const [friendNumber, setFriendNumber] = useState("");
   const [friend, setFriend] = useState<Friend | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
+  const [addingFriend, setAddingFriend] = useState(false);
+  const [added, setAdded] = useState(false);
 
-  // Handle searching by friend's name
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setFriend(null);
+    setAdded(false);
 
     try {
-      //  First check if current user has phone number
       const phoneCheck = await fetch("/api/check-phone-number");
       const phoneData = await phoneCheck.json();
 
       if (!phoneCheck.ok || !phoneData.exists) {
-        setShowPhoneModal(true); // prompt user to add phone
+        setShowPhoneModal(true);
         setLoading(false);
         return;
       }
 
-      //  If phone exists → continue to search friend
       const response = await fetch("/api/friend-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -46,24 +46,44 @@ const FriendSearch = () => {
       if (!response.ok) {
         const errorData = await response.json();
         setError(errorData.message || "Something went wrong");
-        setFriend(null);
         setLoading(false);
         return;
       }
 
       const data = await response.json();
-      console.log("data", data);
       setFriend(data);
       setError(null);
-    } catch (err) {
-      console.log("Error searching friend", err);
+    } catch {
       setError("Something went wrong");
     } finally {
       setLoading(false);
     }
   }
 
-  // Handle phone submission
+  async function handleAddFriend() {
+    if (!friend) return;
+    setAddingFriend(true);
+    try {
+      const res = await fetch("/api/friends", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: friend.phone }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAdded(true);
+        toast.success(`${friend.name} added to friends!`);
+        onFriendAdded?.();
+      } else {
+        toast.error(data.error || "Failed to add friend");
+      }
+    } catch {
+      toast.error("Failed to add friend");
+    } finally {
+      setAddingFriend(false);
+    }
+  }
+
   async function handlePhoneSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
@@ -79,85 +99,82 @@ const FriendSearch = () => {
       }
       setShowPhoneModal(false);
       setError(null);
-      alert("Phone number updated successfully!");
-    } catch (err) {
-      console.log("Error updating phone number", err);
+      toast.success("Phone number saved!");
+    } catch {
+      toast.error("Error updating phone number");
     }
   }
 
   return (
-    <div className="w-full py-2 px-3 bg-white dark:bg-gray-800 shadow-lg rounded-lg border border-gray-200 dark:border-gray-700">
-      <h1 className="text-l sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800 dark:text-gray-100">
-        Search for a Friend
-      </h1>
+    <div className="w-full py-2 px-3 bg-white dark:bg-gray-800 shadow-sm rounded-lg border border-gray-200 dark:border-gray-700">
+      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Find a Contact</h2>
 
-      <form onSubmit={handleSearch} className="flex flex-col space-y-4">
+      <form onSubmit={handleSearch} className="flex gap-2">
         <input
           type="text"
-          placeholder="Enter Friend's Number"
+          placeholder="Phone number"
           value={friendNumber}
           onChange={(e) => setFriendNumber(e.target.value)}
           required
-          className="w-full px-4 py-3 text-gray-900 dark:text-white bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="flex-1 px-3 py-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
           type="submit"
           disabled={loading}
-          className={`w-full py-3 px-4 font-semibold rounded-md transition duration-200 ease-in-out 
-            ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-400 text-white"}`}
+          className="px-3 py-2 text-sm font-medium rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white transition"
         >
-          {loading ? "Finding..." : "Search"}
+          {loading ? "..." : "Search"}
         </button>
       </form>
 
-      {error && (
-        <p className="text-red-500 mt-4 text-sm sm:text-base">{error}</p>
-      )}
+      {error && <p className="text-red-500 mt-2 text-xs">{error}</p>}
 
       {friend && (
-        <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg flex flex-col sm:flex-row items-center justify-between">
-          <span className="text-gray-800 dark:text-gray-100 font-medium text-sm sm:text-base">
-            {friend.name}
-          </span>
-          <Link
-            href={`/chat/${friend.phone}`}
-            className="mt-2 sm:mt-0 p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full transition duration-200 ease-in-out"
-          >
-            <GrChat className="w-6 h-6" />
-          </Link>
+        <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg flex items-center justify-between gap-2">
+          <span className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{friend.name}</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={handleAddFriend}
+              disabled={addingFriend || added}
+              title={added ? "Added!" : "Add Friend"}
+              className={`p-1.5 rounded-full transition ${
+                added
+                  ? "bg-green-100 dark:bg-green-900/40 text-green-600"
+                  : "bg-gray-200 dark:bg-gray-600 hover:bg-green-100 dark:hover:bg-green-900/40 text-gray-600 dark:text-gray-300 hover:text-green-600"
+              }`}
+            >
+              {added ? <Check className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+            </button>
+            <Link
+              href={`/chat/${friend.phone}`}
+              title="Chat"
+              className="p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full transition"
+            >
+              <GrChat className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
       )}
 
-      {/* Phone Modal */}
       {showPhoneModal && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg w-80">
-            <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100">
-              Please add your Phone Number to proceed.
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-xl w-80 border border-gray-200 dark:border-gray-700">
+            <h2 className="text-base font-bold mb-3 text-gray-800 dark:text-gray-100">
+              Add your phone number to find friends
             </h2>
-            <form
-              onSubmit={handlePhoneSubmit}
-              className="flex flex-col space-y-3"
-            >
+            <form onSubmit={handlePhoneSubmit} className="flex flex-col gap-3">
               <input
                 type="text"
                 placeholder="Your phone number"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 required
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <button
-                type="submit"
-                className="bg-blue-500 hover:bg-blue-400 text-white py-2 rounded-md font-semibold"
-              >
-                Submit
+              <button type="submit" className="bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold transition">
+                Save
               </button>
-              <button
-                type="button"
-                onClick={() => setShowPhoneModal(false)}
-                className="mt-2 text-gray-500 hover:text-gray-700 underline"
-              >
+              <button type="button" onClick={() => setShowPhoneModal(false)} className="text-sm text-gray-500 hover:text-gray-700 underline">
                 Cancel
               </button>
             </form>

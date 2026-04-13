@@ -4,7 +4,7 @@ import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { FaGithub, FaGoogle } from "react-icons/fa";
-import { CheckCircle, User } from "lucide-react";
+import { CheckCircle, User, Bell, BellOff } from "lucide-react";
 import Image from "next/image";
 
 type ProfileData = {
@@ -17,11 +17,29 @@ type ProfileData = {
 };
 
 export default function ProfilePage() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission>("default");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setNotificationsEnabled(localStorage.getItem("notificationsEnabled") !== "false");
+    if ("Notification" in window) setBrowserPermission(Notification.permission);
+  }, []);
+
+  const toggleNotifications = async (enabled: boolean) => {
+    if (enabled && "Notification" in window && Notification.permission === "default") {
+      const perm = await Notification.requestPermission();
+      setBrowserPermission(perm);
+      if (perm === "denied") return; // can't enable if browser denied
+    }
+    setNotificationsEnabled(enabled);
+    localStorage.setItem("notificationsEnabled", String(enabled));
+  };
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -199,6 +217,45 @@ export default function ProfilePage() {
               className="w-full py-2.5 text-sm font-semibold bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg transition"
             >
               {saving ? "Saving..." : "Save changes"}
+            </button>
+          </div>
+        </div>
+
+        {/* Notifications */}
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm p-6">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Notifications</h2>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              {notificationsEnabled && browserPermission === "granted" ? (
+                <Bell className="w-4 h-4 text-blue-500" />
+              ) : (
+                <BellOff className="w-4 h-4 text-gray-400" />
+              )}
+              <div>
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Browser notifications</p>
+                {browserPermission === "denied" && (
+                  <p className="text-xs text-red-500 mt-0.5">Blocked by browser — enable in browser settings</p>
+                )}
+                {browserPermission === "default" && (
+                  <p className="text-xs text-gray-400 mt-0.5">Permission not yet granted</p>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={() => toggleNotifications(!notificationsEnabled)}
+              disabled={browserPermission === "denied"}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                notificationsEnabled && browserPermission === "granted"
+                  ? "bg-blue-600"
+                  : "bg-gray-300 dark:bg-gray-600"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  notificationsEnabled && browserPermission === "granted" ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
             </button>
           </div>
         </div>
