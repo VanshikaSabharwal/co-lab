@@ -3,15 +3,25 @@ import prisma from "../../lib/prisma";
 
 export async function POST(req: Request) {
   const { name, path, userId, content, group } = await req.json();
+
+  if (!name || !path || !userId || !content || !group) {
+    return NextResponse.json(
+      { Error: "Missing required fields" },
+      { status: 400 },
+    );
+  }
+
   try {
     const modifiedFile = await prisma.modifiedFiles.upsert({
       where: {
-        userId_groupId: {
+        userId_groupId_path: {
           userId,
           groupId: group,
+          path,
         },
       },
       update: {
+        name,
         content,
         updatedAt: new Date(),
         modifiedById: userId,
@@ -45,46 +55,21 @@ export async function GET(req: Request) {
   if (!group) {
     return NextResponse.json({ Error: "Group required" }, { status: 400 });
   }
+
   try {
-    const modifiedFileData = await prisma.modifiedFiles.findFirst({
+    const modifiedFiles = await prisma.modifiedFiles.findMany({
       where: {
+        groupId: group,
         OR: [{ userId: userId }, { group: { ownerId: userId } }],
       },
-      select: {
-        userId: true,
-        group: {
-          select: {
-            ownerId: true,
-          },
-        },
-      },
+      orderBy: { createdAt: "asc" },
     });
 
-    if (!modifiedFileData) {
-      return NextResponse.json(
-        { Error: "No modified file found" },
-        { status: 404 },
-      );
-    }
-
-    if (
-      userId === modifiedFileData?.userId ||
-      userId === modifiedFileData?.group.ownerId
-    ) {
-      const modifiedFile = await prisma.modifiedFiles.findFirst({
-        where: {
-          groupId: group,
-          OR: [{ userId: userId }, { group: { ownerId: userId } }],
-        },
-      });
-      return NextResponse.json(modifiedFile, { status: 200 });
-    } else {
-      return NextResponse.json({ Error: "Access denied" }, { status: 403 });
-    }
+    return NextResponse.json(modifiedFiles, { status: 200 });
   } catch (error) {
-    console.error("Error fetching file: ", error);
+    console.error("Error fetching files: ", error);
     return NextResponse.json(
-      { Error: "Failed to fetch file" },
+      { Error: "Failed to fetch files" },
       { status: 500 },
     );
   }

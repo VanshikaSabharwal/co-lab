@@ -130,6 +130,7 @@ model Group {
   githubAccessToken String
   sshKey            String?
   ownerId           String
+  liveUrl           String?
   createdAt         DateTime        @default(now())
 
   owner        User?           @relation("OwnerGroups", fields: [ownerId], references: [id])
@@ -204,7 +205,7 @@ model ModifiedFiles {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@unique([userId, groupId], name: "userId_groupId")
+  @@unique([userId, groupId, path], name: "userId_groupId_path")
 }
 
 model Change {
@@ -225,6 +226,7 @@ model Notifications {
   ownerId   String
   ownerName String
   groupName String
+  message   String?
   createdAt DateTime @default(now())
 }
 

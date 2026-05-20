@@ -38,6 +38,7 @@ interface GroupDetails {
   ownerId: string;
   githubRepo: string;
   groupName: string;
+  liveUrl?: string;
 }
 
 function sendBrowserNotification(title: string, body: string) {
@@ -363,6 +364,19 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
               )}
             </div>
             <p className="text-xs text-gray-400 truncate">Github Repo · {groupDetails?.githubRepo ?? ""}</p>
+            {groupDetails?.liveUrl && (
+              <a
+                href={groupDetails.liveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-400 hover:text-blue-300 underline flex items-center gap-1 mt-0.5"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                {groupDetails.liveUrl}
+              </a>
+            )}
           </div>
         </div>
 
@@ -409,6 +423,22 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
                 <FaUsers className="w-4 h-4" />
                 View Members
               </Link>
+
+              {/* Live Site */}
+              {groupDetails?.liveUrl && (
+                <a
+                  href={groupDetails.liveUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMenuOpen(false)}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  Live Site
+                </a>
+              )}
 
               {/* Add Member — owner only */}
               {isOwner && (

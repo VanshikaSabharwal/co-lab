@@ -6,9 +6,17 @@ import { python } from "@codemirror/lang-python";
 import { html } from "@codemirror/lang-html";
 import { java } from "@codemirror/lang-java";
 import { css } from "@codemirror/lang-css";
+import { json } from "@codemirror/lang-json";
+import { markdown } from "@codemirror/lang-markdown";
+import { xml } from "@codemirror/lang-xml";
+import { yaml } from "@codemirror/lang-yaml";
+import { rust } from "@codemirror/lang-rust";
+import { php } from "@codemirror/lang-php";
+import { sql } from "@codemirror/lang-sql";
+import { cpp } from "@codemirror/lang-cpp";
+import { type Extension } from "@codemirror/state";
 import CodeMirror from "@uiw/react-codemirror";
 import toast from "react-hot-toast";
-// import { v4 as uuidv4 } from "uuid";
 import { useSession } from "next-auth/react";
 
 interface GroupProps {
@@ -25,8 +33,48 @@ interface File {
   userId?: string;
 }
 
+const EXTENSION_MAP: Record<string, () => Extension> = {
+  ".js": javascript,
+  ".jsx": () => javascript({ jsx: true }),
+  ".ts": () => javascript({ typescript: true }),
+  ".tsx": () => javascript({ jsx: true, typescript: true }),
+  ".mjs": javascript,
+  ".cjs": javascript,
+  ".py": python,
+  ".pyw": python,
+  ".java": java,
+  ".html": html,
+  ".htm": html,
+  ".css": css,
+  ".scss": css,
+  ".sass": css,
+  ".less": css,
+  ".json": json,
+  ".jsonc": json,
+  ".md": markdown,
+  ".mdx": markdown,
+  ".xml": xml,
+  ".svg": xml,
+  ".yaml": yaml,
+  ".yml": yaml,
+  ".rs": rust,
+  ".php": php,
+  ".phtml": php,
+  ".sql": sql,
+  ".c": cpp,
+  ".cpp": cpp,
+  ".h": cpp,
+  ".hpp": cpp,
+  ".cs": cpp,
+  ".go": () => javascript({ typescript: true }),
+  ".rb": python,
+  ".vue": html,
+  ".svelte": html,
+  ".astro": html,
+};
+
 const Confirm = ({ group }: GroupProps) => {
-  const [fileName, setFileName] = useState("");
+  const [selectedPath, setSelectedPath] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [modifiedFiles, setModifiedFiles] = useState<File[]>([]);
   const [loadingState, setLoadingState] = useState({
@@ -37,7 +85,6 @@ const Confirm = ({ group }: GroupProps) => {
     original: "",
     modified: "",
   });
-  const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [selectedSection, setSelectedSection] = useState<"github" | "modified">(
     "github",
   );
@@ -50,15 +97,16 @@ const Confirm = ({ group }: GroupProps) => {
   const [groupName, setGroupName] = useState("");
   const [commitLink, setCommitLink] = useState("");
   const [commitMessage, setCommitMessage] = useState("");
-  // let crUserId: string;
+  const [crMessage, setCrMessage] = useState("");
 
   useEffect(() => {
     if (group && userId) {
       const fetchFiles = async () => {
         try {
-          const [githubRes, groupRes] = await Promise.all([
+          const [githubRes, groupRes, modifiedRes] = await Promise.all([
             fetch(`/api/files?group=${group}`),
             fetch(`/api/create-group-data?group=${group}`),
+            fetch(`/api/modified-files?group=${group}&userId=${userId}`),
           ]);
 
           if (!githubRes.ok || !groupRes.ok)
@@ -69,22 +117,27 @@ const Confirm = ({ group }: GroupProps) => {
 
           setFiles(Array.isArray(githubData) ? githubData : []);
 
-          // Fetch modified files using the new GET endpoint
-          const modifiedRes = await fetch(
-            `/api/modified-files?group=${group}&userId=${userId}`,
-            { method: "GET" },
-          );
-          if (!modifiedRes) throw new Error("Failed to fetch modified files: ");
+          if (modifiedRes.ok) {
+            const modifiedData = await modifiedRes.json();
+            setModifiedFiles(Array.isArray(modifiedData) ? modifiedData : []);
+          }
 
-          const modifiedData = await modifiedRes.json();
-
-          setModifiedFiles(modifiedData ? [modifiedData] : []);
           setGroupOwnerId(groupData.ownerId);
           setGroupOwnerName(groupData.ownerName);
           setGroupName(groupData.githubRepo);
 
-          if (githubData.length > 0) {
-            await loadFileContent(githubData[0].name);
+          const allFiles = [
+            ...(Array.isArray(githubData) ? githubData : []),
+            ...(modifiedRes.ok
+              ? Array.isArray(await modifiedRes.clone().json())
+                ? await modifiedRes.clone().json()
+                : []
+              : []),
+          ];
+
+          if (allFiles.length > 0) {
+            const firstPath = allFiles[0].path || allFiles[0].name;
+            await loadFileContent(firstPath);
           }
         } catch (error) {
           console.error("Error fetching files:", error);
@@ -98,17 +151,25 @@ const Confirm = ({ group }: GroupProps) => {
     }
   }, [group, userId]);
 
-  const loadFileContent = async (name: string) => {
-    const file = files.find((f) => f.name === name);
-    const modifiedFile = modifiedFiles.find((f) => f.name === name);
+  const loadFileContent = async (path: string) => {
+    setSelectedPath(path);
+
+    const file = files.find((f) => f.path === path);
+    const modifiedFile = modifiedFiles.find((f) => f.path === path);
 
     try {
-      if (file) {
+      if (file && file.url) {
         const res = await fetch(file.url);
-        if (!res.ok) throw new Error("Failed to fetch file content");
-        const data = await res.json();
-        const content = atob(data.content);
-        setFileContent((prev) => ({ ...prev, original: content }));
+        if (res.ok) {
+          const data = await res.json();
+          const content =
+            data.encoding === "base64" ? atob(data.content) : data.content;
+          setFileContent((prev) => ({ ...prev, original: content }));
+        } else {
+          setFileContent((prev) => ({ ...prev, original: "" }));
+        }
+      } else {
+        setFileContent((prev) => ({ ...prev, original: "" }));
       }
 
       if (modifiedFile) {
@@ -116,24 +177,27 @@ const Confirm = ({ group }: GroupProps) => {
           ? atob(modifiedFile.content)
           : "";
         setFileContent((prev) => ({ ...prev, modified: modifiedContent }));
-      }
-
-      if (!openFiles.includes(name)) {
-        setOpenFiles((prev) => [...prev, name]);
+      } else {
+        setFileContent((prev) => ({ ...prev, modified: "" }));
       }
     } catch (error) {
-      console.error("Error loading content:", error);
-      toast.error("Failed to load file content.");
+      setFileContent((prev) => ({
+        ...prev,
+        original: "",
+      }));
     }
   };
 
-  const handleFileClick = (name: string) => {
-    setFileName(name);
-    loadFileContent(name);
+  const handleFileClick = (path: string) => {
+    loadFileContent(path);
   };
 
   const raiseChangeRequest = async () => {
-    // const crId = uuidv4();
+    if (!crMessage.trim()) {
+      toast.error("Please enter a description of your changes.");
+      return;
+    }
+
     setLoadingState((prev) => ({ ...prev, changeRequestLoading: true }));
     try {
       const response = await fetch(`/api/change-request?group=${group}`, {
@@ -141,16 +205,17 @@ const Confirm = ({ group }: GroupProps) => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ userId, userName, groupName: group }),
+        body: JSON.stringify({
+          userId,
+          userName,
+          message: crMessage,
+        }),
       });
 
       if (!response.ok) throw new Error("Failed to raise change request");
 
-      // Fetch the userId of the person who raised the CR and store it
-      // const crData = await response.json();
-      // const crUserId = crData.userId;
-
       toast.success("Change request raised successfully!");
+      setCrMessage("");
     } catch (error) {
       console.error("Error while raising CR:", error);
       toast.error("Failed to raise change request.");
@@ -160,15 +225,17 @@ const Confirm = ({ group }: GroupProps) => {
   };
 
   const getFileLanguage = (fileName: string) => {
-    if (fileName.endsWith(".js")) return javascript();
-    if (fileName.endsWith(".py")) return python();
-    if (fileName.endsWith(".java")) return java();
-    if (fileName.endsWith(".html")) return html();
-    if (fileName.endsWith(".css")) return css();
-    return javascript();
+    const ext = "." + fileName.split(".").pop()?.toLowerCase();
+    const lang = EXTENSION_MAP[ext];
+    return lang ? lang() : javascript();
   };
 
   const handleApproveCr = async () => {
+    if (!commitMessage.trim()) {
+      toast.error("Please enter a commit message.");
+      return;
+    }
+
     setLoadingState((prev) => ({ ...prev, changeRequestLoading: true }));
 
     try {
@@ -209,8 +276,14 @@ const Confirm = ({ group }: GroupProps) => {
   };
 
   const handleRejectCr = async () => {
-    alert("this is rejected");
+    toast.success("Change request rejected.");
   };
+
+  const selectedFile = [...files, ...modifiedFiles].find(
+    (f) => f.path === selectedPath,
+  );
+  const isNewFile = selectedFile && !files.find((f) => f.path === selectedPath);
+
   return (
     <div className="flex flex-col h-screen bg-gray-900">
       <div className="flex-none p-4 bg-gray-800">
@@ -234,10 +307,15 @@ const Confirm = ({ group }: GroupProps) => {
               />
               <div className="flex gap-2">
                 <button
-                  className="bg-green-600 hover:bg-green-700 text-white p-2 rounded"
+                  className="bg-green-600 hover:bg-green-700 text-white p-2 rounded disabled:opacity-50"
                   onClick={handleApproveCr}
+                  disabled={
+                    loadingState.changeRequestLoading || !commitMessage.trim()
+                  }
                 >
-                  Approve
+                  {loadingState.changeRequestLoading
+                    ? "Approving..."
+                    : "Approve"}
                 </button>
                 <button
                   className="bg-red-600 hover:bg-red-700 text-white p-2 rounded"
@@ -263,15 +341,26 @@ const Confirm = ({ group }: GroupProps) => {
             )}
           </div>
         ) : (
-          <button
-            onClick={raiseChangeRequest}
-            disabled={loadingState.changeRequestLoading}
-            className="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded"
-          >
-            {loadingState.changeRequestLoading
-              ? "Raising..."
-              : "Raise Change Request"}
-          </button>
+          <div className="mb-4">
+            <input
+              type="text"
+              value={crMessage}
+              onChange={(e) => setCrMessage(e.target.value)}
+              placeholder="Describe what changes you made..."
+              className="p-2 mb-2 rounded text-black w-full"
+            />
+            <button
+              onClick={raiseChangeRequest}
+              disabled={
+                loadingState.changeRequestLoading || !crMessage.trim()
+              }
+              className="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded disabled:opacity-50"
+            >
+              {loadingState.changeRequestLoading
+                ? "Raising..."
+                : "Raise Change Request"}
+            </button>
+          </div>
         )}
 
         <div className="flex space-x-4">
@@ -279,19 +368,20 @@ const Confirm = ({ group }: GroupProps) => {
             <h3 className="font-bold text-white mb-2">GitHub Files</h3>
             <ul className="flex flex-wrap overflow-x-auto">
               {files.map((file) => (
-                <li key={file.name} className="mb-2 mr-2">
+                <li key={file.path} className="mb-2 mr-2">
                   <button
                     onClick={() => {
                       setSelectedSection("github");
-                      handleFileClick(file.name);
+                      handleFileClick(file.path);
                     }}
                     className={`block w-full text-left p-2 rounded transition-all duration-300 ${
-                      fileName === file.name && selectedSection === "github"
+                      selectedPath === file.path &&
+                      selectedSection === "github"
                         ? "bg-gray-700"
                         : "hover:bg-gray-600"
                     }`}
                   >
-                    {file.name}
+                    {file.path}
                   </button>
                 </li>
               ))}
@@ -302,19 +392,23 @@ const Confirm = ({ group }: GroupProps) => {
             <h3 className="font-bold text-white mb-2">Modified Files</h3>
             <ul className="flex flex-wrap overflow-x-auto">
               {modifiedFiles.map((file) => (
-                <li key={file.name} className="mb-2 mr-2">
+                <li key={file.path} className="mb-2 mr-2">
                   <button
                     onClick={() => {
                       setSelectedSection("modified");
-                      handleFileClick(file.name);
+                      handleFileClick(file.path);
                     }}
                     className={`block w-full text-left p-2 rounded transition-all duration-300 ${
-                      fileName === file.name && selectedSection === "modified"
+                      selectedPath === file.path &&
+                      selectedSection === "modified"
                         ? "bg-gray-700"
                         : "hover:bg-gray-600"
                     }`}
                   >
-                    {file.name}
+                    {file.path}
+                    {!files.find((f) => f.path === file.path) && (
+                      <span className="ml-1 text-xs text-green-400">[NEW]</span>
+                    )}
                   </button>
                 </li>
               ))}
@@ -330,26 +424,40 @@ const Confirm = ({ group }: GroupProps) => {
             <p className="ml-4 text-pink-500">Loading...</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <h4 className="font-bold text-white mb-2">Original File</h4>
-              <CodeMirror
-                value={fileContent.original}
-                extensions={[getFileLanguage(fileName)]}
-                theme="dark"
-                height="400px"
-                readOnly
-              />
+          <div className="grid grid-cols-2 gap-4 h-full">
+            <div className="flex flex-col">
+              <h4 className="font-bold text-white mb-2">
+                {isNewFile ? "Original (new file)" : "Original File"}
+              </h4>
+              <div className="flex-grow overflow-auto">
+                <CodeMirror
+                  value={
+                    isNewFile
+                      ? "// This is a new file — no original on GitHub"
+                      : fileContent.original
+                  }
+                  extensions={[
+                    getFileLanguage(selectedFile?.name || "file.js"),
+                  ]}
+                  theme="dark"
+                  height="100%"
+                  readOnly
+                />
+              </div>
             </div>
-            <div>
+            <div className="flex flex-col">
               <h4 className="font-bold text-white mb-2">Modified File</h4>
-              <CodeMirror
-                value={fileContent.modified}
-                extensions={[getFileLanguage(fileName)]}
-                theme="dark"
-                height="400px"
-                readOnly
-              />
+              <div className="flex-grow overflow-auto">
+                <CodeMirror
+                  value={fileContent.modified || "// No changes"}
+                  extensions={[
+                    getFileLanguage(selectedFile?.name || "file.js"),
+                  ]}
+                  theme="dark"
+                  height="100%"
+                  readOnly
+                />
+              </div>
             </div>
           </div>
         )}

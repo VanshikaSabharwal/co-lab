@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import fetch from "node-fetch";
+import prisma from "../../lib/prisma";
 import crypto from "crypto";
 
-const prisma = new PrismaClient();
-
-// Use the same encryption key you used while encrypting
 const ENCRYPTION_KEY_HEX =
   process.env.ENCRYPTION_KEY ||
   "238d654b1ee39c0663cf2bb6602315cdbc48c322b3a06f50a90e92248468b743";
@@ -13,7 +9,13 @@ const ENCRYPTION_KEY_HEX =
 const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_HEX, "hex");
 const IV_LENGTH = 16;
 
-// Updated decrypt function to match the working version
+function extractRepoName(repo: string): string {
+  const urlMatch = repo.match(/github\.com\/[^/]+\/([^/]+?)(?:\.git)?$/);
+  if (urlMatch && urlMatch[1]) return urlMatch[1];
+  const parts = repo.replace(/\.git$/, "").split("/");
+  return parts[parts.length - 1] || repo;
+}
+
 function decrypt(encryptedText: string): string {
   const parts = encryptedText.split(":");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
@@ -32,6 +34,45 @@ function decrypt(encryptedText: string): string {
   return decrypted;
 }
 
+async function fetchAllFiles(
+  owner: string,
+  repo: string,
+  token: string,
+  path: string = "",
+): Promise<any[]> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: "application/vnd.github.v3+json",
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(
+      `GitHub API: ${error.message || response.statusText}`,
+    );
+  }
+
+  const data = await response.json();
+
+  if (!Array.isArray(data)) {
+    return [data];
+  }
+
+  const files: any[] = [];
+  for (const item of data) {
+    if (item.type === "file") {
+      files.push(item);
+    } else if (item.type === "dir") {
+      const subFiles = await fetchAllFiles(owner, repo, token, item.path);
+      files.push(...subFiles);
+    }
+  }
+  return files;
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const groupId = searchParams.get("group");
@@ -44,17 +85,15 @@ export async function GET(req: Request) {
   }
 
   try {
-    // Retrieve the group details from the database
     const groupDetails = await prisma.group.findUnique({
       where: { id: groupId },
       select: {
-        githubRepo: true, // <-- FETCH ACTUAL REPO NAME
+        githubRepo: true,
         ownerName: true,
         githubAccessToken: true,
       },
     });
 
-    // Check if the group exists
     if (!groupDetails) {
       return NextResponse.json(
         { error: `Group with ID ${groupId} not found` },
@@ -62,7 +101,7 @@ export async function GET(req: Request) {
       );
     }
 
-    const { githubRepo, ownerName, githubAccessToken } = groupDetails;
+    let { githubRepo, ownerName, githubAccessToken } = groupDetails;
 
     if (!githubRepo || !ownerName || !githubAccessToken) {
       return NextResponse.json(
@@ -74,35 +113,26 @@ export async function GET(req: Request) {
       );
     }
 
+    githubRepo = extractRepoName(githubRepo);
     const decryptedAccessToken = decrypt(githubAccessToken);
 
-    const githubApiUrl = `https://api.github.com/repos/${ownerName}/${githubRepo}/contents`;
-    console.log("githubApiUrl", githubApiUrl);
-    const response = await fetch(githubApiUrl, {
-      headers: {
-        Authorization: `token ${decryptedAccessToken}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    });
+    const allFiles = await fetchAllFiles(
+      ownerName,
+      githubRepo,
+      decryptedAccessToken,
+    );
 
-    if (!response.ok) {
-      const error = await response.json();
-      console.error("GitHub API Error: ", error);
-      return NextResponse.json(
-        { error: `Failed to fetch GitHub repo: ${error}` },
-        { status: response.status },
-      );
-    }
-
-    const repoContents = await response.json();
-    return NextResponse.json(repoContents, { status: 200 });
+    return NextResponse.json(allFiles, { status: 200 });
   } catch (err) {
     console.error("Error fetching group or GitHub repo: ", err);
     return NextResponse.json(
-      { error: "Failed to fetch group or GitHub repository" },
+      {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Failed to fetch group or GitHub repository",
+      },
       { status: 500 },
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
