@@ -1,47 +1,8 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import crypto from "crypto";
+import { encrypt, decrypt } from "../../lib/encryption";
 
-// Initialize Prisma Client
 const prisma = new PrismaClient();
-
-// Use an environment variable for the encryption key in production
-const ENCRYPTION_KEY_HEX =
-  process.env.ENCRYPTION_KEY ||
-  "238d654b1ee39c0663cf2bb6602315cdbc48c322b3a06f50a90e92248468b743";
-
-// Convert the hex string into a 32-byte buffer for AES-256 encryption
-const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_HEX, "hex");
-const IV_LENGTH = 16; // AES-256-CBC requires a 16-byte IV
-
-function encrypt(text: string): string {
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const key = ENCRYPTION_KEY as unknown as crypto.CipherKey;
-
-  const cipher = crypto.createCipheriv("aes-256-cbc", key, iv as any);
-  let encrypted = cipher.update(text, "utf8", "hex");
-  encrypted += cipher.final("hex");
-
-  return `${iv.toString("hex")}:${encrypted}`;
-}
-
-function decrypt(encryptedText: string): string {
-  const parts = encryptedText.split(":");
-  if (parts.length !== 2 || !parts[0] || !parts[1]) {
-    throw new Error("Invalid encrypted text format");
-  }
-
-  const [ivHex, encryptedData] = parts;
-
-  const iv = Buffer.from(ivHex, "hex");
-  const key = ENCRYPTION_KEY as unknown as crypto.CipherKey;
-
-  const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv as any);
-  let decrypted = decipher.update(encryptedData, "hex", "utf8");
-  decrypted += decipher.final("utf8");
-
-  return decrypted;
-}
 
 export async function POST(req: Request) {
   try {
@@ -86,6 +47,30 @@ export async function POST(req: Request) {
         { error: "Owner ID is required" },
         { status: 400 },
       );
+
+    // Validate token by calling GitHub API before storing
+    try {
+      const testRes = await fetch("https://api.github.com/user", {
+        headers: {
+          Authorization: `Bearer ${githubAccessToken}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      });
+      if (!testRes.ok) {
+        const err = await testRes.json().catch(() => ({}));
+        return NextResponse.json(
+          {
+            error: `GitHub token is invalid: ${err.message || testRes.statusText}. Try reconnecting your GitHub account or use a valid PAT.`,
+          },
+          { status: 401 },
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "Failed to verify GitHub token. Check your network." },
+        { status: 502 },
+      );
+    }
 
     const groupExists = await prisma.group.findFirst({
       where: {
@@ -189,6 +174,76 @@ export async function GET(req: Request) {
     console.error("Error fetching group:", err);
     return NextResponse.json(
       { error: "Failed to fetch group data" },
+      { status: 500 },
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { groupId, userId } = await req.json();
+
+    if (!groupId || !userId) {
+      return NextResponse.json(
+        { error: "Group ID and User ID are required" },
+        { status: 400 },
+      );
+    }
+
+    const group = await prisma.group.findUnique({
+      where: { id: groupId },
+      select: { ownerId: true },
+    });
+
+    if (!group) {
+      return NextResponse.json(
+        { error: "Group not found" },
+        { status: 404 },
+      );
+    }
+
+    if (group.ownerId !== userId) {
+      return NextResponse.json(
+        { error: "Only the group owner can delete this group" },
+        { status: 403 },
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.change.deleteMany({
+        where: { file: { groupId } },
+      });
+
+      await tx.modifiedFiles.deleteMany({ where: { groupId } });
+
+      await tx.groupMember.deleteMany({ where: { groupId } });
+
+      await tx.groupMessage.deleteMany({ where: { groupId } });
+
+      await tx.invite.deleteMany({ where: { groupId } });
+
+      await tx.notifications.deleteMany({ where: { groupId } });
+
+      await tx.rejectedCr.deleteMany({ where: { groupId } });
+
+      await tx.approvedCr.deleteMany({ where: { groupId } });
+
+      await tx.guestGroup.deleteMany({ where: { groupId } });
+
+      await tx.callRoom.deleteMany({ where: { groupId } });
+
+      await tx.file.deleteMany({ where: { group: groupId } });
+
+      await tx.group.delete({ where: { id: groupId } });
+    });
+
+    return NextResponse.json({ success: true }, { status: 200 });
+  } catch (err: any) {
+    console.error("Error deleting group:", err);
+    return NextResponse.json(
+      { error: err.message ?? "Failed to delete group" },
       { status: 500 },
     );
   } finally {

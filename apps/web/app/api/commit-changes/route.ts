@@ -1,41 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Octokit } from "@octokit/rest";
 import prisma from "../../lib/prisma";
-import crypto from "crypto";
+import { decrypt } from "../../lib/encryption";
 
 export async function GET() {
   return NextResponse.json(
     { message: "Method not allowed. Use POST to commit changes." },
     { status: 405 },
   );
-}
-
-// Use an environment variable for the encryption key in production
-const ENCRYPTION_KEY_HEX =
-  process.env.ENCRYPTION_KEY ||
-  "238d654b1ee39c0663cf2bb6602315cdbc48c322b3a06f50a90e92248468b743";
-
-// Convert the hex string into a 32-byte buffer for AES-256 encryption
-const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_HEX, "hex");
-const IV_LENGTH = 16; // AES-256-CBC requires a 16-byte IV
-
-// Fixed decrypt function matching your working reference
-function decrypt(encryptedText: string): string {
-  const parts = encryptedText.split(":");
-  if (parts.length !== 2 || !parts[0] || !parts[1]) {
-    throw new Error("Invalid encrypted text format");
-  }
-
-  const [ivHex, encryptedData] = parts;
-
-  const iv = Buffer.from(ivHex, "hex");
-  const key = ENCRYPTION_KEY as unknown as crypto.CipherKey;
-
-  const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv as any);
-  let decrypted = decipher.update(encryptedData, "hex", "utf8");
-  decrypted += decipher.final("utf8");
-
-  return decrypted;
 }
 
 export async function POST(req: NextRequest) {

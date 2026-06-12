@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../lib/auth";
 import Link from "next/link";
 import PageTour from "../components/PageTour";
+import DeleteGroupButton from "./DeleteGroupButton";
 
 export default async function MyGroups() {
   const session = await getServerSession(authOptions);
@@ -93,12 +94,17 @@ export default async function MyGroups() {
                     {group.ownerId === userId ? "Owner" : "Member"}
                   </span>
                 </div>
-                <Link
-                  href={`/group/${group.id}`}
-                  className="inline-block mt-3 text-xs font-medium text-blue-500 hover:underline"
-                >
-                  Open group chat →
-                </Link>
+                <div className="flex items-center gap-3 mt-3">
+                  <Link
+                    href={`/group/${group.id}`}
+                    className="text-xs font-medium text-blue-500 hover:underline"
+                  >
+                    Open group chat →
+                  </Link>
+                  {group.ownerId === userId && (
+                    <DeleteGroupButton groupId={group.id} ownerId={group.ownerId} userId={userId} />
+                  )}
+                </div>
               </li>
             ))}
           </ul>

@@ -102,7 +102,7 @@ const HeroSection = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white dark:from-gray-900 dark:to-black text-gray-900 dark:text-white">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-[#829797] dark:from-gray-900 dark:to-black text-gray-900 dark:text-white">
       <SiteTour />
 
       {/* Hero */}
@@ -202,7 +202,7 @@ const HeroSection = () => {
               {[...testimonials, ...testimonials].map((testimonial, index) => (
                 <div
                   key={`${testimonial.id}-${index}`}
-                  className="flex-shrink-0 w-64 sm:w-72 p-5 rounded-xl bg-white dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 shadow-sm"
+                  className="flex-shrink-0 w-64 sm:w-72 p-5 rounded-xl bg-[#f3f4f6] dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 shadow-sm"
                 >
                   <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
                     "{testimonial.description}"

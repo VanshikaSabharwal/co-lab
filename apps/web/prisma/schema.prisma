@@ -26,7 +26,13 @@ model User {
   ownedGroups         Group[]         @relation("OwnerGroups")
   groupMembers        GroupMember[]   @relation("UserGroups")
   groupMessages       GroupMessage[]  @relation("GroupMessages")
-  userModifiedFiles   ModifiedFiles[]  @relation("userModifiedFile")
+  userModifiedFiles   ModifiedFiles[]    @relation("userModifiedFile")
+
+  // Call relations
+  initiatedCalls      CallRoom[]         @relation("CallInitiator")
+  callParticipants    CallParticipant[]
+  initiatedRecordings CallRecording[]    @relation("RecordingInitiator")
+  pushSubscriptions   PushSubscription[]
 
   // NextAuth relations
   accounts            Account[]
@@ -275,6 +281,95 @@ model Testimonial {
   description String
   userId      String? @unique
   createdAt   DateTime @default(now())
+}
+
+// === CALL MODELS ===
+
+enum CallStatus {
+  RINGING
+  ONGOING
+  ENDED
+  MISSED
+  REJECTED
+}
+
+enum CallType {
+  AUDIO
+  VIDEO
+  GROUP
+}
+
+model CallRoom {
+  id              String             @id @default(cuid())
+  livekitRoom     String             @unique
+  type            CallType
+  status          CallStatus         @default(RINGING)
+  groupId         String?
+  initiatorId     String
+  startedAt       DateTime           @default(now())
+  endedAt         DateTime?
+
+  participants   CallParticipant[]
+  recordings     CallRecording[]
+  initiator      User               @relation("CallInitiator", fields: [initiatorId], references: [id])
+
+  @@index([status])
+  @@index([groupId])
+  @@index([livekitRoom])
+}
+
+model CallParticipant {
+  id              String     @id @default(cuid())
+  callId          String
+  userId          String
+  joinedAt        DateTime?
+  leftAt          DateTime?
+  isScreenSharing Boolean    @default(false)
+  isMuted         Boolean    @default(false)
+  isVideoOff      Boolean    @default(false)
+
+  call            CallRoom   @relation(fields: [callId], references: [id], onDelete: Cascade)
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([callId, userId])
+  @@index([userId])
+}
+
+enum RecordingStatus {
+  RECORDING
+  COMPLETED
+  FAILED
+}
+
+model CallRecording {
+  id              String          @id @default(cuid())
+  callId          String
+  startedAt       DateTime        @default(now())
+  endedAt         DateTime?
+  filePath        String?
+  fileSize        Int?
+  durationMs      Int?
+  resolution      String          @default("1080p")
+  status          RecordingStatus @default(RECORDING)
+  initiatedById   String
+
+  call            CallRoom        @relation(fields: [callId], references: [id], onDelete: Cascade)
+  initiatedBy     User            @relation("RecordingInitiator", fields: [initiatedById], references: [id])
+
+  @@index([callId])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
 }
 
 // === ENUMS ===

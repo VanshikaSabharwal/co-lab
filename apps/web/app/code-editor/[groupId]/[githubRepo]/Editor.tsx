@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { javascript } from "@codemirror/lang-javascript";
 import { python } from "@codemirror/lang-python";
 import { html } from "@codemirror/lang-html";
@@ -28,6 +28,13 @@ import {
   Sparkles,
   X,
   Check,
+  Folder,
+  FolderOpen,
+  FileCode,
+  FileJson,
+  ChevronRight,
+  ChevronDown,
+  File,
 } from "lucide-react";
 
 interface CodeProps {
@@ -35,7 +42,7 @@ interface CodeProps {
   group: string;
 }
 
-interface File {
+interface CodeFile {
   name: string;
   path: string;
   sha: string;
@@ -43,6 +50,14 @@ interface File {
   url: string;
   content?: string;
   _generated?: boolean;
+}
+
+interface TreeNode {
+  name: string;
+  path: string;
+  type: "file" | "folder";
+  children: TreeNode[];
+  file?: CodeFile;
 }
 
 const EXTENSION_MAP: Record<string, () => Extension> = {
@@ -85,10 +100,126 @@ const EXTENSION_MAP: Record<string, () => Extension> = {
   ".astro": html,
 };
 
+const FILE_ICON_MAP: Record<
+  string,
+  { icon: React.ReactNode; color: string }
+> = {
+  ".js": { icon: <FileCode size={15} />, color: "text-yellow-400" },
+  ".jsx": { icon: <FileCode size={15} />, color: "text-cyan-400" },
+  ".ts": { icon: <FileCode size={15} />, color: "text-blue-400" },
+  ".tsx": { icon: <FileCode size={15} />, color: "text-blue-500" },
+  ".mjs": { icon: <FileCode size={15} />, color: "text-yellow-400" },
+  ".cjs": { icon: <FileCode size={15} />, color: "text-yellow-400" },
+  ".py": { icon: <FileCode size={15} />, color: "text-blue-300" },
+  ".pyw": { icon: <FileCode size={15} />, color: "text-blue-300" },
+  ".java": { icon: <FileCode size={15} />, color: "text-orange-400" },
+  ".html": { icon: <FileCode size={15} />, color: "text-orange-500" },
+  ".htm": { icon: <FileCode size={15} />, color: "text-orange-500" },
+  ".css": { icon: <FileCode size={15} />, color: "text-pink-400" },
+  ".scss": { icon: <FileCode size={15} />, color: "text-pink-400" },
+  ".sass": { icon: <FileCode size={15} />, color: "text-pink-400" },
+  ".less": { icon: <FileCode size={15} />, color: "text-pink-400" },
+  ".json": { icon: <FileJson size={15} />, color: "text-yellow-300" },
+  ".jsonc": { icon: <FileJson size={15} />, color: "text-yellow-300" },
+  ".md": { icon: <FileText size={15} />, color: "text-gray-400" },
+  ".mdx": { icon: <FileText size={15} />, color: "text-gray-400" },
+  ".xml": { icon: <FileCode size={15} />, color: "text-purple-400" },
+  ".yaml": { icon: <FileCode size={15} />, color: "text-red-400" },
+  ".yml": { icon: <FileCode size={15} />, color: "text-red-400" },
+  ".rs": { icon: <FileCode size={15} />, color: "text-orange-500" },
+  ".php": { icon: <FileCode size={15} />, color: "text-indigo-400" },
+  ".phtml": { icon: <FileCode size={15} />, color: "text-indigo-400" },
+  ".sql": { icon: <FileCode size={15} />, color: "text-orange-300" },
+  ".c": { icon: <FileCode size={15} />, color: "text-blue-400" },
+  ".cpp": { icon: <FileCode size={15} />, color: "text-blue-400" },
+  ".h": { icon: <FileCode size={15} />, color: "text-blue-300" },
+  ".hpp": { icon: <FileCode size={15} />, color: "text-blue-300" },
+  ".cs": { icon: <FileCode size={15} />, color: "text-green-400" },
+  ".go": { icon: <FileCode size={15} />, color: "text-cyan-400" },
+  ".rb": { icon: <FileCode size={15} />, color: "text-red-400" },
+  ".vue": { icon: <FileCode size={15} />, color: "text-green-500" },
+  ".svelte": { icon: <FileCode size={15} />, color: "text-orange-400" },
+  ".astro": { icon: <FileCode size={15} />, color: "text-purple-500" },
+  ".svg": { icon: <FileCode size={15} />, color: "text-yellow-300" },
+  ".png": { icon: <FileCode size={15} />, color: "text-purple-400" },
+  ".jpg": { icon: <FileCode size={15} />, color: "text-purple-400" },
+  ".jpeg": { icon: <FileCode size={15} />, color: "text-purple-400" },
+  ".gif": { icon: <FileCode size={15} />, color: "text-purple-400" },
+  ".ico": { icon: <FileCode size={15} />, color: "text-purple-400" },
+  ".webp": { icon: <FileCode size={15} />, color: "text-purple-400" },
+};
+
 function getFileLanguage(fileName: string) {
   const ext = "." + fileName.split(".").pop()?.toLowerCase();
   const lang = EXTENSION_MAP[ext];
   return lang ? lang() : javascript();
+}
+
+function getFileIcon(fileName: string) {
+  const ext = "." + fileName.split(".").pop()?.toLowerCase();
+  const match = FILE_ICON_MAP[ext];
+  if (match) return match;
+  const name = fileName.toLowerCase();
+  if (name === "dockerfile")
+    return { icon: <FileCode size={15} />, color: "text-blue-400" };
+  if (name === "makefile")
+    return { icon: <FileCode size={15} />, color: "text-orange-400" };
+  if (name.startsWith(".env"))
+    return { icon: <FileCode size={15} />, color: "text-yellow-300" };
+  if (name === ".gitignore" || name === ".dockerignore")
+    return { icon: <FileCode size={15} />, color: "text-gray-500" };
+  return { icon: <File size={15} />, color: "text-gray-400" };
+}
+
+function buildFileTree(files: CodeFile[]): TreeNode[] {
+  const root: TreeNode[] = [];
+  const map = new Map<string, TreeNode>();
+
+  for (const file of files) {
+    const parts = file.path.split("/");
+    let currentPath = "";
+    let currentLevel: (TreeNode[] | TreeNode)[] = root;
+
+    parts.forEach((part, i) => {
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+
+      let existing = map.get(currentPath);
+      if (!existing) {
+        existing = {
+          name: part,
+          path: currentPath,
+          type: i === parts.length - 1 ? "file" : "folder",
+          children: [],
+          file: i === parts.length - 1 ? file : undefined,
+        };
+        map.set(currentPath, existing);
+        (currentLevel as TreeNode[]).push(existing);
+      }
+      currentLevel = existing.children;
+    });
+  }
+
+  const sortNodes = (nodes: TreeNode[]) => {
+    nodes.sort((a, b) => {
+      if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    nodes.forEach((n) => sortNodes(n.children));
+  };
+  sortNodes(root);
+
+  return root;
+}
+
+function findFileInTree(nodes: TreeNode[], path: string): CodeFile | undefined {
+  for (const node of nodes) {
+    if (node.type === "file" && node.path === path) return node.file;
+    if (node.type === "folder") {
+      const found = findFileInTree(node.children, path);
+      if (found) return found;
+    }
+  }
+  return undefined;
 }
 
 export default function Editor({ github, group }: CodeProps) {
@@ -97,22 +228,66 @@ export default function Editor({ github, group }: CodeProps) {
   const [originalContent, setOriginalContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<CodeFile[]>([]);
   const [isEdited, setIsEdited] = useState(false);
   const { data: session } = useSession();
   const userId = session?.user.id;
-  const userName = session?.user?.name;
   const [filePath, setFilePath] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [liveUrl, setLiveUrl] = useState<string>("");
   const [editingUrl, setEditingUrl] = useState(false);
   const [urlInput, setUrlInput] = useState("");
   const [generatingReadme, setGeneratingReadme] = useState(false);
-  const isOwner = session?.user?.id
-    ? session.user.id === (files as any).ownerId
-    : false;
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   const router = useRouter();
+
+  const fileTree = useMemo(() => buildFileTree(files), [files]);
+
+  const loadFileContent = useCallback(
+    async (file: CodeFile) => {
+      if (!file) return;
+      setFilePath(file.path);
+      setFileName(file.name);
+
+      if (file._generated) {
+        setFileContent(file.content || "");
+        setOriginalContent(file.content || "");
+        setIsEdited(true);
+        setOpenFiles((prev) =>
+          prev.includes(file.path) ? prev : [...prev, file.path],
+        );
+        return;
+      }
+
+      if (!file.url) {
+        setFileContent("");
+        setOriginalContent("");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/file-content", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ groupId: group, filePath: file.path }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Failed to fetch file content");
+        }
+        const data = await res.json();
+        setFileContent(data.content);
+        setOriginalContent(data.content);
+        setOpenFiles((prev) =>
+          prev.includes(file.path) ? prev : [...prev, file.path],
+        );
+      } catch {
+        toast.error("Failed to load the file content.");
+      }
+    },
+    [group],
+  );
 
   useEffect(() => {
     if (group && github) {
@@ -124,12 +299,13 @@ export default function Editor({ github, group }: CodeProps) {
           ]);
 
           if (filesRes.ok) {
-            const data = await filesRes.json();
+            const data: CodeFile[] = await filesRes.json();
             setFiles(data);
             if (data.length > 0) {
-              setFileName(data[0].name);
-              setFilePath(data[0].path);
-              await loadFileContent(data[0]);
+              const firstFile = data[0]!;
+              setFileName(firstFile.name);
+              setFilePath(firstFile.path);
+              await loadFileContent(firstFile);
             }
           } else {
             toast.error("Failed to load the files.");
@@ -149,38 +325,7 @@ export default function Editor({ github, group }: CodeProps) {
       };
       init();
     }
-  }, [group, github]);
-
-  const loadFileContent = async (file: File) => {
-    if (!file) return;
-    setFilePath(file.path);
-    setFileName(file.name);
-
-    if (file._generated && file.content) {
-      setFileContent(file.content);
-      setOriginalContent(file.content);
-      setIsEdited(true);
-      if (!openFiles.includes(file.path)) {
-        setOpenFiles((prev) => [...prev, file.path]);
-      }
-      return;
-    }
-
-    try {
-      const res = await fetch(file.url);
-      if (!res.ok) throw new Error("Failed to fetch file content");
-      const data = await res.json();
-      const content =
-        data.encoding === "base64" ? atob(data.content) : data.content;
-      setFileContent(content);
-      setOriginalContent(content);
-      if (!openFiles.includes(file.path)) {
-        setOpenFiles((prev) => [...prev, file.path]);
-      }
-    } catch (error) {
-      toast.error("Failed to load the file content.");
-    }
-  };
+  }, [group, github, loadFileContent]);
 
   const handleFileChange = (newContent: string) => {
     const originalLines = originalContent.split("\n");
@@ -218,7 +363,19 @@ export default function Editor({ github, group }: CodeProps) {
     setFileContent(newContent);
   };
 
-  const handleFileClick = async (file: File) => {
+  const expandToFile = (path: string) => {
+    const parts = path.split("/");
+    const toExpand = new Set(expandedFolders);
+    let currentPath = "";
+    parts.slice(0, -1).forEach((part) => {
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+      toExpand.add(currentPath);
+    });
+    setExpandedFolders(toExpand);
+  };
+
+  const handleFileClick = async (file: CodeFile) => {
+    expandToFile(file.path);
     setFileName(file.name);
     setFilePath(file.path);
     await loadFileContent(file);
@@ -250,7 +407,7 @@ export default function Editor({ github, group }: CodeProps) {
       toast.success("File saved successfully!");
       setIsEdited(false);
       router.push(`/confirm-changes/${group}`);
-    } catch (error) {
+    } catch {
       toast.error("Failed to save the file.");
     } finally {
       setSaving(false);
@@ -281,7 +438,7 @@ export default function Editor({ github, group }: CodeProps) {
       toast.success("Changes saved! Review them before raising.");
       setIsEdited(false);
       router.push(`/confirm-changes/${group}`);
-    } catch (error) {
+    } catch {
       toast.error("Failed to save the file.");
     } finally {
       setSaving(false);
@@ -331,11 +488,11 @@ export default function Editor({ github, group }: CodeProps) {
 
       const data = await res.json();
 
-      const virtualFile: File = {
+      const virtualFile: CodeFile = {
         name: data.fileName || "README.md",
         path: data.path || "README.md",
         sha: "",
-        size: data.content.length,
+        size: (data.content || "").length,
         url: "",
         content: data.content,
         _generated: true,
@@ -352,14 +509,15 @@ export default function Editor({ github, group }: CodeProps) {
         setFiles((prev) => [...prev, virtualFile]);
       }
 
+      expandToFile(virtualFile.path);
       setFileName(virtualFile.name);
       setFilePath(virtualFile.path);
       setFileContent(virtualFile.content || "");
       setOriginalContent(virtualFile.content || "");
       setIsEdited(true);
-      if (!openFiles.includes(virtualFile.path)) {
-        setOpenFiles((prev) => [...prev, virtualFile.path]);
-      }
+      setOpenFiles((prev) =>
+        prev.includes(virtualFile.path) ? prev : [...prev, virtualFile.path],
+      );
 
       toast.success("README generated successfully!");
     } catch (error) {
@@ -371,132 +529,281 @@ export default function Editor({ github, group }: CodeProps) {
     }
   };
 
-  return (
-    <div className="flex flex-col h-screen bg-gray-900">
-      <div className="bg-gray-800 text-white p-4 md:order-1">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold">Files</h2>
+  const toggleFolder = (path: string) => {
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+
+  const closeTab = (path: string) => {
+    setOpenFiles((prev) => prev.filter((p) => p !== path));
+    if (filePath === path && openFiles.length > 0) {
+      const remaining = openFiles.filter((p) => p !== path);
+      if (remaining.length > 0) {
+        const last = remaining[remaining.length - 1]!;
+        const f =
+          files.find((fl) => fl.path === last) ||
+          findFileInTree(fileTree, last);
+        if (f) handleFileClick(f);
+      }
+    }
+  };
+
+  const renderTreeNode = (node: TreeNode, depth: number = 0) => {
+    const isExpanded = expandedFolders.has(node.path);
+    const isSelected = node.path === filePath;
+
+    if (node.type === "folder") {
+      return (
+        <div key={node.path}>
+          <button
+            onClick={() => toggleFolder(node.path)}
+            className={`w-full flex items-center gap-1 px-2 py-1 text-left text-sm transition-colors duration-150 hover:bg-gray-800 rounded-sm ${
+              isSelected ? "bg-gray-700" : ""
+            }`}
+            style={{ paddingLeft: `${12 + depth * 16}px` }}
+          >
+            <span className="w-4 h-4 flex items-center justify-center text-gray-500">
+              {isExpanded ? (
+                <ChevronDown size={14} />
+              ) : (
+                <ChevronRight size={14} />
+              )}
+            </span>
+            <span className="w-4 h-4 flex items-center justify-center text-gray-400">
+              {isExpanded ? <FolderOpen size={15} /> : <Folder size={15} />}
+            </span>
+            <span className="truncate text-gray-300">{node.name}</span>
+          </button>
+          {isExpanded && (
+            <div>
+              {node.children.map((child) => renderTreeNode(child, depth + 1))}
+            </div>
+          )}
         </div>
-        <ul className="flex flex-wrap md:flex-nowrap overflow-x-auto">
-          {files.map((file) => (
-            <li key={file.path} className="mb-2 mr-2">
-              <button
-                onClick={() => handleFileClick(file)}
-                className={`block w-full text-left p-2 rounded transition-all duration-300 ${
-                  filePath === file.path ? "bg-gray-700" : "hover:bg-gray-600"
-                }`}
-              >
-                {file.path}
-                {file._generated && (
-                  <Sparkles className="inline w-3 h-3 ml-1 text-yellow-400" />
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
+      );
+    }
+
+    const { icon, color } = getFileIcon(node.name);
+    return (
+      <button
+        key={node.path}
+        onClick={() => node.file && handleFileClick(node.file)}
+        className={`w-full flex items-center gap-1 px-2 py-1 text-left text-sm transition-colors duration-150 rounded-sm ${
+          isSelected
+            ? "bg-gray-700 text-white"
+            : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
+        }`}
+        style={{ paddingLeft: `${28 + depth * 16}px` }}
+      >
+        <span className={`w-4 h-4 flex items-center justify-center shrink-0 ${color}`}>
+          {icon}
+        </span>
+        <span className="truncate">{node.name}</span>
+        {node.file?._generated && (
+          <Sparkles className="w-3 h-3 ml-1 text-yellow-400 shrink-0" />
+        )}
+      </button>
+    );
+  };
+
+  return (
+    <div className="flex h-screen bg-gray-900 text-white">
+      {/* Left Sidebar - File Explorer */}
+      <div className="w-64 flex flex-col bg-gray-900 border-r border-gray-700/50 shrink-0">
+        {/* Sidebar Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/50">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            Files
+          </h2>
+          <span className="text-xs text-gray-500">{files.length}</span>
+        </div>
+
+        {/* File Tree */}
+        <div className="flex-1 overflow-y-auto py-2">
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="flex items-center gap-2 text-gray-500 text-sm">
+                <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" />
+                Loading files...
+              </div>
+            </div>
+          ) : fileTree.length === 0 ? (
+            <p className="text-gray-500 text-sm px-4 py-8 text-center">
+              No files found
+            </p>
+          ) : (
+            fileTree.map((node) => renderTreeNode(node, 0))
+          )}
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="p-3 border-t border-gray-700/50 space-y-2">
+          <button
+            onClick={handleGenerateReadme}
+            disabled={generatingReadme}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded bg-purple-600/80 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <FileText size={14} />
+            {generatingReadme ? "Generating..." : "Generate AI README"}
+          </button>
+        </div>
       </div>
 
-      <div className="flex-grow flex flex-col bg-gray-900 md:order-2">
-        <div className="p-4 bg-gray-800 text-white shadow-lg space-y-2">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg md:text-xl font-bold truncate">
-              {filePath || fileName}
-            </h1>
-          </div>
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-gray-400" />
-              {editingUrl ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="url"
-                    value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    placeholder="https://your-site.vercel.app"
-                    className="px-2 py-1 text-sm text-black rounded bg-white w-64"
-                    autoFocus
-                  />
-                  <button
-                    onClick={handleSaveLiveUrl}
-                    className="p-1 rounded bg-green-600 hover:bg-green-500"
-                    title="Save"
-                  >
-                    <Check className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setEditingUrl(false)}
-                    className="p-1 rounded bg-gray-600 hover:bg-gray-500"
-                    title="Cancel"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : liveUrl ? (
-                <div className="flex items-center gap-2">
-                  <a
-                    href={liveUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-400 hover:text-blue-300 underline flex items-center gap-1"
-                  >
-                    {liveUrl}
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                  <button
-                    onClick={() => {
-                      setUrlInput(liveUrl);
-                      setEditingUrl(true);
-                    }}
-                    className="p-1 rounded hover:bg-gray-700"
-                    title="Edit URL"
-                  >
-                    <Settings className="w-3.5 h-3.5 text-gray-400" />
-                  </button>
-                </div>
-              ) : (
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Toolbar */}
+        <div className="flex items-center justify-between px-4 py-2 bg-gray-800/80 border-b border-gray-700/50">
+          <div className="flex items-center gap-2 min-w-0">
+            <Globe className="w-4 h-4 text-gray-500 shrink-0" />
+            {editingUrl ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="url"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  placeholder="https://your-site.vercel.app"
+                  className="px-2 py-1 text-xs text-gray-900 rounded bg-gray-100 w-56 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  autoFocus
+                />
+                <button
+                  onClick={handleSaveLiveUrl}
+                  className="p-1 rounded bg-green-600 hover:bg-green-500"
+                  title="Save"
+                >
+                  <Check size={14} />
+                </button>
+                <button
+                  onClick={() => setEditingUrl(false)}
+                  className="p-1 rounded bg-gray-600 hover:bg-gray-500"
+                  title="Cancel"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : liveUrl ? (
+              <div className="flex items-center gap-1.5 min-w-0">
+                <a
+                  href={liveUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-400 hover:text-blue-300 underline truncate flex items-center gap-1"
+                >
+                  {liveUrl}
+                  <ExternalLink size={12} />
+                </a>
                 <button
                   onClick={() => {
-                    setUrlInput("");
+                    setUrlInput(liveUrl);
                     setEditingUrl(true);
                   }}
-                  className="text-sm text-gray-400 hover:text-white flex items-center gap-1"
+                  className="p-1 rounded hover:bg-gray-700 shrink-0"
+                  title="Edit URL"
                 >
-                  <Settings className="w-3.5 h-3.5" />
-                  Set Live URL
+                  <Settings size={13} className="text-gray-400" />
                 </button>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
+              </div>
+            ) : (
               <button
-                onClick={handleGenerateReadme}
-                disabled={generatingReadme}
-                className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => {
+                  setUrlInput("");
+                  setEditingUrl(true);
+                }}
+                className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1"
               >
-                <FileText className="w-3.5 h-3.5" />
-                {generatingReadme ? "Generating..." : "Generate AI README"}
+                <Settings size={13} />
+                Set Live URL
               </button>
-            </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-gray-500">
+              {isEdited && (
+                <span className="text-yellow-400 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" />
+                  Edited
+                </span>
+              )}
+            </span>
+            <button
+              onClick={handleSave}
+              disabled={!isEdited || saving}
+              className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-colors ${
+                isEdited
+                  ? "bg-blue-600 hover:bg-blue-500 text-white"
+                  : "bg-gray-700 text-gray-500 cursor-not-allowed"
+              }`}
+            >
+              {saving ? "Saving..." : isEdited ? "Save Changes" : "No Changes"}
+            </button>
+            <button
+              onClick={handleRaiseChangeRequest}
+              disabled={!isEdited || saving}
+              className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded transition-colors ${
+                isEdited
+                  ? "bg-green-700 hover:bg-green-600 text-white"
+                  : "bg-gray-700 text-gray-500 cursor-not-allowed"
+              }`}
+            >
+              {saving ? "Processing..." : "Change Request"}
+            </button>
           </div>
         </div>
-        <div className="flex bg-gray-800 p-2 overflow-x-auto">
-          {openFiles.map((path) => {
-            const f = files.find((fl) => fl.path === path);
-            return (
-              <button
-                key={path}
-                onClick={() => f && handleFileClick(f)}
-                className={`mr-2 p-2 text-sm md:text-base ${
-                  filePath === path ? "bg-gray-700" : "hover:bg-gray-600"
-                } rounded`}
-              >
-                {f?.name || path}
-              </button>
-            );
-          })}
+
+        {/* Tabs Bar */}
+        <div className="flex bg-gray-800/40 border-b border-gray-700/50 overflow-x-auto">
+          {openFiles.length === 0 ? (
+            <div className="px-4 py-2 text-xs text-gray-600">
+              Select a file to open
+            </div>
+          ) : (
+            openFiles.map((path) => {
+              const f =
+                files.find((fl) => fl.path === path) ||
+                findFileInTree(fileTree, path);
+              const { color } = f ? getFileIcon(f.name) : { color: "text-gray-400" };
+              return (
+                <div
+                  key={path}
+                  className={`group flex items-center gap-1.5 px-3 py-2 text-xs cursor-pointer border-r border-gray-700/50 transition-colors ${
+                    filePath === path
+                      ? "bg-gray-800 text-white border-t-2 border-t-blue-500"
+                      : "bg-gray-900/50 text-gray-400 hover:bg-gray-800/50 hover:text-gray-300"
+                  }`}
+                >
+                  <span
+                    className={`w-3.5 h-3.5 flex items-center justify-center shrink-0 ${color}`}
+                  >
+                    {f ? getFileIcon(f.name).icon : <File size={13} />}
+                  </span>
+                  <span className="truncate max-w-32">{f?.name || path}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(path);
+                    }}
+                    className="ml-1 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-gray-700 transition-opacity"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              );
+            })
+          )}
         </div>
-        <div className="flex-grow overflow-auto">
+
+        {/* Code Editor */}
+        <div className="flex-1 overflow-hidden">
           {loading ? (
-            <p className="text-white p-4">Loading...</p>
+            <div className="flex items-center justify-center h-full">
+              <div className="flex items-center gap-2 text-gray-500 text-sm">
+                <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" />
+                Loading editor...
+              </div>
+            </div>
           ) : (
             <CodeMirror
               value={fileContent}
@@ -504,34 +811,19 @@ export default function Editor({ github, group }: CodeProps) {
               theme="dark"
               extensions={[getFileLanguage(fileName)]}
               onChange={handleFileChange}
+              basicSetup={{
+                lineNumbers: true,
+                highlightActiveLineGutter: true,
+                highlightActiveLine: true,
+                foldGutter: true,
+                bracketMatching: true,
+                closeBrackets: true,
+                indentOnInput: true,
+                tabSize: 2,
+              }}
             />
           )}
         </div>
-      </div>
-
-      <div className="p-4 bg-gray-800 text-white md:order-3 flex gap-3">
-        <button
-          onClick={handleSave}
-          disabled={!isEdited || saving}
-          className={`p-2 rounded ${
-            isEdited
-              ? "bg-blue-500 hover:bg-blue-400"
-              : "bg-gray-500 cursor-not-allowed"
-          }`}
-        >
-          {saving ? "Saving..." : isEdited ? "Save Changes" : "No Changes"}
-        </button>
-        <button
-          onClick={handleRaiseChangeRequest}
-          disabled={!isEdited || saving}
-          className={`p-2 rounded ${
-            isEdited
-              ? "bg-green-600 hover:bg-green-500"
-              : "bg-gray-500 cursor-not-allowed"
-          }`}
-        >
-          {saving ? "Processing..." : "Raise Change Request"}
-        </button>
       </div>
     </div>
   );

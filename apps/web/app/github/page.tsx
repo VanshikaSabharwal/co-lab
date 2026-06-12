@@ -21,11 +21,10 @@ export default function GithubGroupCreateLogin() {
   const { data: session } = useSession();
   const [repos, setRepos] = useState<GithubRepo[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<GithubRepo | null>(null);
-  const [sshToken, setSshToken] = useState("");
   const [groupName, setGroupName] = useState("");
-  const [showInfo, setShowInfo] = useState(false);
   const [repoOpen, setRepoOpen] = useState(false);
   const [repoSearch, setRepoSearch] = useState("");
+  const [creating, setCreating] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,7 +38,7 @@ export default function GithubGroupCreateLogin() {
   }, []);
 
   const filteredRepos = repos.filter((r) =>
-    r.full_name.toLowerCase().includes(repoSearch.toLowerCase())
+    r.full_name.toLowerCase().includes(repoSearch.toLowerCase()),
   );
 
   const fetchRepos = async () => {
@@ -67,11 +66,12 @@ export default function GithubGroupCreateLogin() {
   }, [session]);
 
   const handleCreateGroup = async () => {
-    if (!selectedRepo || !sshToken || !groupName.trim()) {
-      toast.error("Group name, Repo and SSH key are required");
+    if (!selectedRepo || !groupName.trim()) {
+      toast.error("Group name and Repo are required");
       return;
     }
-    console.log(selectedRepo);
+
+    setCreating(true);
 
     try {
       const ownerName = selectedRepo.full_name.split("/")[0];
@@ -86,7 +86,6 @@ export default function GithubGroupCreateLogin() {
           githubRepoUrl: selectedRepo.html_url,
           githubAccessToken: session?.user?.githubAccessToken,
           ownerId: session?.user?.id,
-          sshKey: sshToken,
         }),
       });
 
@@ -95,13 +94,14 @@ export default function GithubGroupCreateLogin() {
       if (response.ok) {
         toast.success(`Group created successfully ✨`);
         setGroupName("");
-        setSshToken("");
         setSelectedRepo(null);
       } else {
         toast.error(`Error: ${data.error}`);
       }
     } catch {
       toast.error("Failed to create group");
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -145,13 +145,6 @@ export default function GithubGroupCreateLogin() {
                   Enter a name for your group, then pick the GitHub repo you want to link it to.`,
               },
               {
-                id: "github-ssh",
-                attachTo: { element: "#tour-github-ssh", on: "top" },
-                text: `<strong>SSH public key</strong><br/><br/>
-                  Run the shell command shown here to generate a key, add it to GitHub, then paste the public key above.
-                  Click ℹ️ for step-by-step instructions.`,
-              },
-              {
                 id: "github-create",
                 attachTo: { element: "#tour-github-create", on: "top" },
                 text: `<strong>Create the group</strong><br/><br/>
@@ -163,174 +156,83 @@ export default function GithubGroupCreateLogin() {
 
           {/* GROUP NAME INPUT */}
           <div id="tour-github-name">
-          <input
-            type="text"
-            value={groupName}
-            onChange={(e) => setGroupName(e.target.value)}
-            placeholder="Enter group name"
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg mb-4 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-          />
+            <input
+              type="text"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              placeholder="Enter group name"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg mb-4 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+            />
 
-          {/* CUSTOM REPO DROPDOWN */}
-          <div ref={dropdownRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setRepoOpen((o) => !o)}
-              className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-            >
-              <span className={selectedRepo ? "" : "text-gray-400"}>
-                {selectedRepo ? selectedRepo.full_name : "Select a repo"}
-              </span>
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${repoOpen ? "rotate-180" : ""}`} />
-            </button>
-
-            {repoOpen && (
-              <div className="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden">
-                {/* Search */}
-                <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-700">
-                  <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                  <input
-                    autoFocus
-                    type="text"
-                    value={repoSearch}
-                    onChange={(e) => setRepoSearch(e.target.value)}
-                    placeholder="Search repos..."
-                    className="flex-1 text-sm bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
-                  />
-                  {repoSearch && (
-                    <button onClick={() => setRepoSearch("")}>
-                      <X className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
-                    </button>
-                  )}
-                </div>
-
-                {/* List */}
-                <ul className="max-h-52 overflow-y-auto">
-                  {filteredRepos.length === 0 ? (
-                    <li className="px-3 py-3 text-sm text-gray-400 text-center">No repos found</li>
-                  ) : (
-                    filteredRepos.map((repo) => (
-                      <li
-                        key={repo.id}
-                        onClick={() => {
-                          setSelectedRepo(repo);
-                          setRepoOpen(false);
-                          setRepoSearch("");
-                        }}
-                        className={`px-3 py-2.5 text-sm cursor-pointer transition-colors ${
-                          selectedRepo?.id === repo.id
-                            ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium"
-                            : "text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
-                        }`}
-                      >
-                        {repo.full_name}
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-            )}
-          </div>
-          </div>
-
-          <h3 id="tour-github-ssh" className="text-sm font-semibold mt-5 mb-1 flex items-center gap-2 text-gray-900 dark:text-white">
-            Enter SSH Public Key
-            <button
-              onClick={() => setShowInfo(true)}
-              className="text-s px-2 py-1 rounded hover:bg-grey-700"
-            >
-              ℹ️
-            </button>
-          </h3>
-
-          {showInfo && (
-            <div
-              className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
-              onClick={() => setShowInfo(false)} // closes modal if clicking outside
-            >
-              <div
-                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5 rounded-xl shadow-lg w-full max-w-sm mx-4 z-50"
-                onClick={(e) => e.stopPropagation()} // prevent closing when clicking inside modal
+            {/* CUSTOM REPO DROPDOWN */}
+            <div ref={dropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setRepoOpen((o) => !o)}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
               >
-                <h3 className="font-bold text-lg mb-3 text-gray-900 dark:text-white">How to use this?</h3>
+                <span className={selectedRepo ? "" : "text-gray-400"}>
+                  {selectedRepo ? selectedRepo.full_name : "Select a repo"}
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 text-gray-400 transition-transform ${repoOpen ? "rotate-180" : ""}`}
+                />
+              </button>
 
-                <p className="text-gray-700 dark:text-gray-300 text-sm">
-                  1. Copy the above SSH command using the Copy button.
-                  <br />
-                  2. Open your terminal.
-                  <br />
-                  3. Paste the command and press <b>Enter</b>.<br />
-                  4. This will generate a new SSH key and print the public key.
-                  <br />
-                  5. Copy the printed public key and go to{" "}
-                  <a
-                    href="https://github.com/settings/keys"
-                    target="_blank"
-                    className="underline text-blue-600 hover:text-blue-800"
-                  >
-                    GitHub → SSH and GPG Keys → New SSH Key
-                  </a>
-                  .<br />
-                  6. Paste the key there and hit <b>Save</b>.<br />
-                  <br />
-                </p>
+              {repoOpen && (
+                <div className="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+                    <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                    <input
+                      autoFocus
+                      type="text"
+                      value={repoSearch}
+                      onChange={(e) => setRepoSearch(e.target.value)}
+                      placeholder="Search repos..."
+                      className="flex-1 text-sm bg-transparent text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none"
+                    />
+                    {repoSearch && (
+                      <button onClick={() => setRepoSearch("")}>
+                        <X className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
+                      </button>
+                    )}
+                  </div>
 
-                <button
-                  onClick={() => setShowInfo(false)}
-                  className="mt-4 w-full p-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  Got it
-                </button>
-              </div>
+                  <ul className="max-h-52 overflow-y-auto">
+                    {filteredRepos.length === 0 ? (
+                      <li className="px-3 py-3 text-sm text-gray-400 text-center">No repos found</li>
+                    ) : (
+                      filteredRepos.map((repo) => (
+                        <li
+                          key={repo.id}
+                          onClick={() => {
+                            setSelectedRepo(repo);
+                            setRepoOpen(false);
+                            setRepoSearch("");
+                          }}
+                          className={`px-3 py-2.5 text-sm cursor-pointer transition-colors ${
+                            selectedRepo?.id === repo.id
+                              ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium"
+                              : "text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                          }`}
+                        >
+                          {repo.full_name}
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </div>
+              )}
             </div>
-          )}
-          {/* SSH COMMAND BOX */}
-          <div className="relative bg-gray-900 text-gray-100 py-6 px-4 mt-3 rounded-lg text-xs font-mono">
-            {/* COPY BUTTON */}
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(
-                  `ssh-keygen -t ed25519 -C "${session?.user?.email ?? "youremail@example.com"}"\ncat ~/.ssh/id_ed25519.pub`,
-                );
-                toast.success("Copied to clipboard!");
-              }}
-              className="absolute top-2 right-2 text-xs px-2 py-1 bg-gray-600 rounded hover:bg-gray-700"
-            >
-              Copy
-            </button>
-
-            <pre className="whitespace-pre-wrap break-all">
-              {`ssh-keygen -t ed25519 -C "${session?.user?.email ?? "youremail@example.com"}"
-cat ~/.ssh/id_ed25519.pub`}
-            </pre>
           </div>
-
-          <input
-            type="text"
-            value={sshToken}
-            onChange={(e) => setSshToken(e.target.value)}
-            placeholder="Paste SSH public key here"
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg mt-3 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-          />
-
-          <a
-            href={sshToken ? "https://github.com/settings/ssh/new" : undefined}
-            onClick={(e) => { if (!sshToken) e.preventDefault(); }}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`block text-center w-full mt-2 py-2.5 text-sm font-medium rounded-lg text-white transition ${
-              sshToken ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-300 dark:bg-gray-700 cursor-not-allowed"
-            }`}
-          >
-            Save SSH key to GitHub
-          </a>
 
           <button
             id="tour-github-create"
             onClick={handleCreateGroup}
-            className="mt-3 w-full py-2.5 text-sm font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg transition"
+            disabled={creating || !selectedRepo || !groupName.trim()}
+            className="mt-6 w-full py-2.5 text-sm font-semibold bg-green-600 hover:bg-green-700 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Create Group
+            {creating ? "Creating..." : "Create Group"}
           </button>
         </div>
       )}

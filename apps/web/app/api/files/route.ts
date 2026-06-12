@@ -1,38 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
-import crypto from "crypto";
-
-const ENCRYPTION_KEY_HEX =
-  process.env.ENCRYPTION_KEY ||
-  "238d654b1ee39c0663cf2bb6602315cdbc48c322b3a06f50a90e92248468b743";
-
-const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_HEX, "hex");
-const IV_LENGTH = 16;
-
-function extractRepoName(repo: string): string {
-  const urlMatch = repo.match(/github\.com\/[^/]+\/([^/]+?)(?:\.git)?$/);
-  if (urlMatch && urlMatch[1]) return urlMatch[1];
-  const parts = repo.replace(/\.git$/, "").split("/");
-  return parts[parts.length - 1] || repo;
-}
-
-function decrypt(encryptedText: string): string {
-  const parts = encryptedText.split(":");
-  if (parts.length !== 2 || !parts[0] || !parts[1]) {
-    throw new Error("Invalid encrypted text format");
-  }
-
-  const [ivHex, encryptedData] = parts;
-
-  const iv = Buffer.from(ivHex, "hex");
-  const key = ENCRYPTION_KEY as unknown as crypto.CipherKey;
-
-  const decipher = crypto.createDecipheriv("aes-256-cbc", key, iv as any);
-  let decrypted = decipher.update(encryptedData, "hex", "utf8");
-  decrypted += decipher.final("utf8");
-
-  return decrypted;
-}
+import { decrypt, extractRepoName } from "../../lib/encryption";
 
 async function fetchAllFiles(
   owner: string,
@@ -49,10 +17,17 @@ async function fetchAllFiles(
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(
-      `GitHub API: ${error.message || response.statusText}`,
-    );
+    const error = await response.json().catch(() => ({}));
+    const status = response.status;
+    let msg = error.message || response.statusText;
+    if (status === 401) {
+      msg = "GitHub token is invalid or expired. Try creating the group again with a fresh token.";
+    } else if (status === 403) {
+      msg = `GitHub token lacks permission. Ensure it has 'repo' scope.`;
+    } else if (status === 404) {
+      msg = `Repo not found at ${owner}/${repo}. Check owner name and repo name.`;
+    }
+    throw new Error(msg);
   }
 
   const data = await response.json();
@@ -114,7 +89,12 @@ export async function GET(req: Request) {
     }
 
     githubRepo = extractRepoName(githubRepo);
-    const decryptedAccessToken = decrypt(githubAccessToken);
+    let decryptedAccessToken: string;
+    try {
+      decryptedAccessToken = decrypt(githubAccessToken);
+    } catch {
+      decryptedAccessToken = githubAccessToken;
+    }
 
     const allFiles = await fetchAllFiles(
       ownerName,

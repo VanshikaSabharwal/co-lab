@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import Cookies from "js-cookie";
+import { Phone, Video } from "lucide-react";
+import { useCall } from "../../components/call/CallProvider";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
@@ -42,6 +44,7 @@ function sendBrowserNotification(title: string, body: string) {
 
 const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
   const { data: session, status } = useSession();
+  const { initiateCall, isCalling } = useCall();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isConnected, setIsConnected] = useState(false);
@@ -384,7 +387,24 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => initiateCall("AUDIO", undefined, undefined)}
+            disabled={isCalling}
+            title="Audio call"
+            className="p-2 rounded-full bg-green-500 hover:bg-green-400 text-white transition disabled:opacity-40"
+          >
+            <Phone className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => initiateCall("VIDEO", undefined, undefined)}
+            disabled={isCalling}
+            title="Video call"
+            className="p-2 rounded-full bg-blue-500 hover:bg-blue-400 text-white transition disabled:opacity-40"
+          >
+            <Video className="w-4 h-4" />
+          </button>
+
           {isConnected && (
             <span className="w-2 h-2 rounded-full bg-green-500" title="Online" />
           )}

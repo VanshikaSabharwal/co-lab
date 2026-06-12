@@ -4,7 +4,10 @@ import { useSession } from "next-auth/react";
 import { TbSend } from "react-icons/tb";
 import { FaUserPlus, FaUsers, FaCrown } from "react-icons/fa";
 import toast from "react-hot-toast";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Video } from "lucide-react";
+import { useCall } from "../../components/call/CallProvider";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
@@ -55,6 +58,8 @@ function sendBrowserNotification(title: string, body: string) {
 
 const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const { data: session, status } = useSession();
+  const { initiateCall, isCalling } = useCall();
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
@@ -68,6 +73,10 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   // 3-dot menu
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Delete confirm
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Background
   const [chatBg, setChatBg] = useState(() =>
@@ -323,6 +332,29 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
     setMenuOpen(false);
   };
 
+  const handleDeleteGroup = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/create-group-data", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groupId: group, userId: senderId }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error ?? "Failed to delete group");
+        return;
+      }
+      toast.success("Group deleted");
+      router.push("/groups");
+    } catch {
+      toast.error("An error occurred");
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   if (loadingGroupDetails || status === "loading") {
     return (
       <div className="flex justify-center items-center h-[calc(100vh-56px)]">
@@ -380,7 +412,16 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => initiateCall("GROUP", undefined, group)}
+            disabled={isCalling}
+            title="Group video call"
+            className="p-2 rounded-full bg-green-500 hover:bg-green-400 text-white transition disabled:opacity-40"
+          >
+            <Video className="w-4 h-4" />
+          </button>
+
           {isConnected && (
             <span className="w-2 h-2 rounded-full bg-green-500" title="Online" />
           )}
@@ -464,6 +505,19 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
                 </svg>
                 Clear Chat
               </button>
+
+              {/* Delete Group — owner only */}
+              {isOwner && (
+                <button
+                  onClick={() => { setMenuOpen(false); setShowDeleteConfirm(true); }}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete Group
+                </button>
+              )}
 
               {/* Background picker */}
               <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-2">
@@ -603,6 +657,33 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
           <TbSend size={18} />
         </button>
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-900 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Delete Group?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+              This will permanently delete the group, all messages, files, and member data. This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteGroup}
+                disabled={deleting}
+                className="px-4 py-2 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 transition-colors"
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

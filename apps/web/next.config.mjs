@@ -20,10 +20,10 @@ const securityHeaders = [
   // Control how much referrer info is sent
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
 
-  // Disable browser features you don't use
+  // Allow camera/mic for calls
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+    value: "camera=(self), microphone=(self), geolocation=(), interest-cohort=()",
   },
 
   // Legacy XSS filter (still useful for older browsers)
@@ -46,7 +46,7 @@ const securityHeaders = [
       "img-src 'self' data: https:",
       "font-src 'self'",
       // Allow connections to your own API + WebSocket server + GitHub API
-      `connect-src 'self' ${allowedOrigins.join(" ")} ws://localhost:8080 wss: https://api.github.com`,
+      `connect-src 'self' ${allowedOrigins.join(" ")} ws://localhost:8080 wss: ws://localhost:7880 https://api.github.com`,
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

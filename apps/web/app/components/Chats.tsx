@@ -9,6 +9,8 @@ import GroupChat from "../group/[groupId]/GroupChat";
 import PageTour from "./PageTour";
 import Link from "next/link";
 import { GrChat } from "react-icons/gr";
+import { Phone, Video } from "lucide-react";
+import { useCall } from "./call/CallProvider";
 
 interface Group {
   ownerName: string;
@@ -26,6 +28,7 @@ interface Friend {
 }
 
 export default function Component() {
+  const { initiateCall, isCalling } = useCall();
   const { data: session, status } = useSession();
   const [selectedChat, setSelectedChat] = useState<Group | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -167,15 +170,35 @@ export default function Component() {
                       {f.name ?? f.phone}
                     </span>
                   </div>
-                  {f.phone && (
-                    <Link
-                      href={`/chat/${f.phone}`}
-                      title="Open chat"
-                      className="p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full transition shrink-0"
-                    >
-                      <GrChat className="w-3.5 h-3.5" />
-                    </Link>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {f.phone && (
+                      <>
+                        <button
+                          onClick={() => initiateCall("AUDIO", f.id)}
+                          disabled={isCalling}
+                          title="Audio call"
+                          className="p-1.5 bg-green-500 hover:bg-green-400 text-white rounded-full transition shrink-0 disabled:opacity-40"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => initiateCall("VIDEO", f.id)}
+                          disabled={isCalling}
+                          title="Video call"
+                          className="p-1.5 bg-blue-500 hover:bg-blue-400 text-white rounded-full transition shrink-0 disabled:opacity-40"
+                        >
+                          <Video className="w-3.5 h-3.5" />
+                        </button>
+                        <Link
+                          href={`/chat/${f.phone}`}
+                          title="Open chat"
+                          className="p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full transition shrink-0"
+                        >
+                          <GrChat className="w-3.5 h-3.5" />
+                        </Link>
+                      </>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -212,6 +235,14 @@ export default function Component() {
                       {group.githubRepo}
                     </a>
                   </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); initiateCall("GROUP", undefined, group.id); }}
+                    disabled={isCalling}
+                    title="Group video call"
+                    className="p-1.5 bg-green-500 hover:bg-green-400 text-white rounded-full transition shrink-0 disabled:opacity-40"
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                  </button>
                 </li>
               ))}
             </ul>

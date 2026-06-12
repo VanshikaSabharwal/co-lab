@@ -117,8 +117,9 @@ const Confirm = ({ group }: GroupProps) => {
 
           setFiles(Array.isArray(githubData) ? githubData : []);
 
+          let modifiedData: any[] = [];
           if (modifiedRes.ok) {
-            const modifiedData = await modifiedRes.json();
+            modifiedData = await modifiedRes.json();
             setModifiedFiles(Array.isArray(modifiedData) ? modifiedData : []);
           }
 
@@ -128,11 +129,7 @@ const Confirm = ({ group }: GroupProps) => {
 
           const allFiles = [
             ...(Array.isArray(githubData) ? githubData : []),
-            ...(modifiedRes.ok
-              ? Array.isArray(await modifiedRes.clone().json())
-                ? await modifiedRes.clone().json()
-                : []
-              : []),
+            ...(Array.isArray(modifiedData) ? modifiedData : []),
           ];
 
           if (allFiles.length > 0) {
