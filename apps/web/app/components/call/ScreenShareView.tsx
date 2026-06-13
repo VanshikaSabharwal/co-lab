@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { Room, Participant } from "livekit-client";
+import type { Room, Participant, RemoteTrack, RemoteTrackPublication, TrackPublication } from "livekit-client";
+import { Track } from "livekit-client";
 
 interface ScreenShareViewProps {
   room: Room;
@@ -12,16 +13,52 @@ export default function ScreenShareView({ room, onClose }: ScreenShareViewProps)
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    const remoteParticipants = [...room.remoteParticipants.values()];
-    for (const p of remoteParticipants) {
-      const screenPub = p.getTrackPublication("screen_share");
-      if (screenPub?.track) {
-        screenPub.track.attach(videoRef.current!);
-        return () => {
-          screenPub.track?.detach();
-        };
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+
+    function attachScreenShare(publication: TrackPublication) {
+      if (publication.source === Track.Source.ScreenShare && publication.track) {
+        publication.track.attach(videoEl!);
       }
     }
+
+    function detachScreenShare(publication: TrackPublication) {
+      if (publication.source === Track.Source.ScreenShare) {
+        publication.track?.detach();
+      }
+    }
+
+    // Track subscribed/unsubscribed handlers with correct LiveKit signatures
+    function onTrackSubscribed(_track: RemoteTrack, publication: RemoteTrackPublication) {
+      attachScreenShare(publication);
+    }
+
+    function onTrackUnsubscribed(_track: RemoteTrack, publication: RemoteTrackPublication) {
+      detachScreenShare(publication);
+    }
+
+    // Attach already-subscribed screen share tracks and subscribe to events
+    for (const p of room.remoteParticipants.values()) {
+      p.trackPublications.forEach(attachScreenShare);
+      p.on("trackSubscribed", onTrackSubscribed);
+      p.on("trackUnsubscribed", onTrackUnsubscribed);
+    }
+
+    // Also watch for new participants joining with screen share
+    function onParticipantConnected(p: Participant) {
+      p.trackPublications.forEach(attachScreenShare);
+      p.on("trackSubscribed", onTrackSubscribed);
+      p.on("trackUnsubscribed", onTrackUnsubscribed);
+    }
+    room.on("participantConnected", onParticipantConnected);
+
+    return () => {
+      room.off("participantConnected", onParticipantConnected);
+      for (const p of room.remoteParticipants.values()) {
+        p.off("trackSubscribed", onTrackSubscribed);
+        p.off("trackUnsubscribed", onTrackUnsubscribed);
+      }
+    };
   }, [room]);
 
   return (

@@ -20,7 +20,8 @@ export default function ParticipantList({ participants, localParticipant }: Part
       </h3>
       <ul className="space-y-2">
         {all.map((p) => {
-          const name = p.name || p.identity || "Unknown";
+          const identity = p.identity;
+          const name = p.name || identity || "Unknown";
           const isLocal = p === localParticipant;
           const isMuted = p.isMicrophoneEnabled === false;
           const isSpeaking = p.isSpeaking;
@@ -35,7 +36,7 @@ export default function ParticipantList({ participants, localParticipant }: Part
                 <User className="h-4 w-4 text-gray-600 dark:text-gray-300" />
               </div>
               <div className="flex-1 truncate text-sm text-gray-800 dark:text-gray-200">
-                {name}
+                {name}{identity !== name ? ` (${identity})` : ""}
                 {isLocal ? " (You)" : ""}
               </div>
               {isMuted && <MicOff className="h-4 w-4 text-red-400" />}

@@ -1,0 +1,114 @@
+{
+  "version": "1.0.0",
+  "name": "code-editor-improvements-v1",
+  "description": "Configuration for the Ko-Lab code editor IDE-like UI overhaul",
+  "changes": [
+    {
+      "id": "left-sidebar-file-tree",
+      "description": "Replaced horizontal file list with a VS Code-style left sidebar containing an expandable/collapsible file tree",
+      "file": "apps/web/app/code-editor/[groupId]/[githubRepo]/Editor.tsx",
+      "details": {
+        "width": "w-64 (256px)",
+        "position": "left",
+        "features": [
+          "Folder tree with expand/collapse (ChevronRight/ChevronDown icons)",
+          "Folders sorted first, then files alphabetically",
+          "Auto-expand parent folders when a file is selected",
+          "Active file highlighted with bg-gray-700",
+          "Scrollable tree with overflow-y-auto",
+          "File count badge in header"
+        ]
+      }
+    },
+    {
+      "id": "file-type-icons",
+      "description": "Added file type icons with color coding for all supported languages",
+      "file": "apps/web/app/code-editor/[groupId]/[githubRepo]/Editor.tsx",
+      "details": {
+        "mapping": "FILE_ICON_MAP in Editor.tsx",
+        "extensions_covered": [
+          ".js/.jsx (yellow/cyan)",
+          ".ts/.tsx (blue)",
+          ".py (light blue)",
+          ".java (orange)",
+          ".html (deep orange)",
+          ".css/.scss/.sass/.less (pink)",
+          ".json/.jsonc (yellow)",
+          ".md/.mdx (gray)",
+          ".yaml/.yml (red)",
+          ".rs (orange)",
+          ".php (indigo)",
+          ".c/.cpp/.h/.hpp (blue)",
+          ".cs (green)",
+          ".go (cyan)",
+          ".rb (red)",
+          ".vue (green)",
+          ".svelte (orange)",
+          ".astro (purple)",
+          "Dockerfile, Makefile, .env*, .gitignore (special handling)"
+        ]
+      }
+    },
+    {
+      "id": "ide-layout",
+      "description": "Restructured the entire editor layout to a proper IDE layout with sidebar, tabs, and editor panel",
+      "file": "apps/web/app/code-editor/[groupId]/[githubRepo]/Editor.tsx",
+      "details": {
+        "layout": "flex h-screen (sidebar | main-content)",
+        "main_content_sections": [
+          "Top toolbar: file path, live URL editor, save/change-request buttons, edited indicator",
+          "Tab bar: horizontal scrolling tabs for open files with file-type icons and close button on hover",
+          "Code editor: CodeMirror filling remaining space with enhanced basicSetup options",
+          "Bottom actions moved into toolbar for streamlined UI"
+        ]
+      }
+    },
+    {
+      "id": "enhanced-codemirror-setup",
+      "description": "Enabled additional CodeMirror features for a better editing experience",
+      "file": "apps/web/app/code-editor/[groupId]/[githubRepo]/Editor.tsx",
+      "details": {
+        "basicSetup": {
+          "lineNumbers": true,
+          "highlightActiveLineGutter": true,
+          "highlightActiveLine": true,
+          "foldGutter": true,
+          "bracketMatching": true,
+          "closeBrackets": true,
+          "indentOnInput": true,
+          "tabSize": 2
+        }
+      }
+    },
+    {
+      "id": "tab-close-behavior",
+      "description": "Added ability to close open tabs with a close button (X) that appears on hover",
+      "file": "apps/web/app/code-editor/[groupId]/[githubRepo]/Editor.tsx",
+      "details": {
+        "behavior": "Closing a tab removes it from openFiles. If the closed tab was active, switches to the last remaining open tab.",
+        "no_tab_message": "Shows 'Select a file to open' when no files are open"
+      }
+    }
+  ],
+  "supported_languages": {
+    "javascript": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+    "python": [".py", ".pyw", ".rb"],
+    "java": [".java"],
+    "html": [".html", ".htm", ".vue", ".svelte", ".astro"],
+    "css": [".css", ".scss", ".sass", ".less"],
+    "json": [".json", ".jsonc"],
+    "markdown": [".md", ".mdx"],
+    "xml": [".xml", ".svg"],
+    "yaml": [".yaml", ".yml"],
+    "rust": [".rs"],
+    "php": [".php", ".phtml"],
+    "sql": [".sql"],
+    "cpp": [".c", ".cpp", ".h", ".hpp", ".cs"],
+    "go": [".go"]
+  },
+  "notes": [
+    "All existing functionality preserved: Save Changes, Change Request, Live URL, Generate AI README",
+    "Dark theme maintained (bg-gray-900 base)",
+    "No external dependencies added beyond what was already in package.json"
+  ]
+}

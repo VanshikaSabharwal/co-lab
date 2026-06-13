@@ -1,0 +1,172 @@
+{
+  "name": "ko-lab-call-system-v1",
+  "version": "1.0.0",
+  "description": "Real-time audio/video call system using LiveKit Cloud and WebSocket signaling",
+  "architecture": {
+    "signaling": {
+      "server": "apps/web-socket/src/index.ts",
+      "type": "Standalone WebSocket server on port 8080",
+      "protocol": "Custom JSON messages over WebSocket",
+      "registration": "Users register via ?userId= query param in WS URL",
+      "messages": {
+        "call_offer": "Initiator -> WS server -> Recipient (individual or group broadcast)",
+        "call_accepted": "Recipient -> WS server -> Initiator",
+        "call_rejected": "Recipient -> WS server -> Initiator",
+        "call_ended": "Either party -> WS server -> Other party",
+        "call_missed": "Sent when recipient doesn't respond (not yet implemented server-side)"
+      }
+    },
+    "media": {
+      "provider": "LiveKit Cloud",
+      "host": "ko-lab-5s9w0dn1.livekit.cloud",
+      "room_management": "RoomServiceClient from livekit-server-sdk",
+      "token_gen": "AccessToken with roomJoin + canPublish + canSubscribe grants",
+      "client_lib": "livekit-client v2.19.0"
+    },
+    "frontend": {
+      "provider": "apps/web/app/components/call/CallProvider.tsx",
+      "ui_root": "apps/web/app/components/call/CallUI.tsx",
+      "components": {
+        "CallProvider": "React context provider managing call state, WS connection, LiveKit room",
+        "CallUI": "Root UI orchestrator — renders IncomingCallModal, ActiveCallBar, or CallPanel",
+        "IncomingCallModal": "Full-screen modal with Accept Video, Accept Audio, Reject buttons + ringtone",
+        "CallPanel": "Full-screen call UI — audio mode (black screen) or video mode (grid)",
+        "ActiveCallBar": "Minimized top bar shown when call is active but not expanded",
+        "CallControls": "Bottom controls bar for video calls (mute, video toggle, screen share, end)",
+        "VideoGrid": "Grid of participant video tiles",
+        "VideoTile": "Individual participant video/audio indicator",
+        "ParticipantList": "Side panel listing call participants",
+        "ScreenShareView": "Screen sharing overlay",
+        "IncomingCallModal": "Incoming call notification with ringtone"
+      }
+    },
+    "database": {
+      "models": {
+        "CallRoom": "Stores room name, type (AUDIO/VIDEO/GROUP), status (RINGING/ONGOING/ENDED/MISSED/REJECTED)",
+        "CallParticipant": "Links users to calls with join/leave timestamps",
+        "CallRecording": "Stores recording metadata (not yet used)"
+      }
+    }
+  },
+  "flows": {
+    "initiate_call": {
+      "trigger": "User clicks Audio/Video/Group call button",
+      "steps": [
+        "CallProvider.initiateCall(type, targetId?, groupId?) called",
+        "POST /api/calls/initiate with { type, targetId, groupId }",
+        "API creates LiveKit room via RoomServiceClient.createRoom",
+        "API creates CallRoom in DB with status RINGING + participants",
+        "API generates LiveKit token for initiator via createLiveKitToken",
+        "CallProvider creates Room({ audioCaptureDefaults: {}, videoCaptureDefaults: {...} })",
+        "Room connects to LiveKit Cloud with token",
+        "setActiveCall(...) — CallUI auto-expands to full CallPanel",
+        "wsSend({ type: 'call_offer', targetId/groupId, callId, roomName, callerName, callType })"
+      ]
+    },
+    "receive_call": {
+      "trigger": "WS server receives call_offer",
+      "steps": [
+        "WS server looks up recipient in individualClients (by targetId) or broadcasts to group",
+        "Recipient's CallProvider.handleSignalingMessage receives call_offer",
+        "setIncomingCall(...) — CallUI renders IncomingCallModal",
+        "Ringtone plays via Web Audio API oscillator (440Hz pulsed)",
+        "User sees caller name, call type (Audio/Video), Accept Video, Accept Audio, Reject buttons"
+      ]
+    },
+    "accept_call": {
+      "trigger": "User clicks Accept Video or Accept Audio",
+      "steps": [
+        "acceptCall(callId, startWithVideo=true/false) called",
+        "PUT /api/calls/{id}/accept",
+        "API validates caller is a participant, updates status to ONGOING",
+        "API returns LiveKit token for the acceptor",
+        "Room({ audioCaptureDefaults: {}, videoCaptureDefaults: {...} }) connects to LiveKit",
+        "If startWithVideo=false: room.localParticipant.setCameraEnabled(false)",
+        "setActiveCall(...) — CallUI auto-expands to full CallPanel",
+        "setIncomingCall(null) — modal closes, ringtone stops",
+        "wsSend({ type: 'call_accepted', initiatorId, ... }) to notify caller",
+        "Caller receives call_accepted → toast 'Call accepted'"
+      ]
+    },
+    "reject_call": {
+      "trigger": "User clicks Reject",
+      "steps": [
+        "rejectCall(callId) called",
+        "PUT /api/calls/{id}/reject",
+        "wsSend({ type: 'call_rejected', initiatorId, reason })",
+        "setIncomingCall(null) — modal closes, ringtone stops",
+        "Caller receives call_rejected → toast 'Call rejected', room disconnected, setActiveCall(null)"
+      ]
+    },
+    "end_call": {
+      "trigger": "Either user clicks End Call",
+      "steps": [
+        "endCall() called",
+        "Room.disconnect() from LiveKit",
+        "PUT /api/calls/{id}/end",
+        "wsSend({ type: 'call_ended', callId, groupId? })",
+        "setActiveCall(null)",
+        "Other party receives call_ended → room disconnected, setActiveCall(null)"
+      ]
+    }
+  },
+  "audio_mode_ui": {
+    "condition": "videoEnabled === false (set on Accept Audio or AUDIO call type)",
+    "layout": "Full black screen (bg-black) with:",
+    "elements": [
+      "Top bar: 'Audio Call' label + minimize button",
+      "Center: Large circular avatar + call type label + participant count",
+      "Bottom: 3 large circular buttons — Mute (toggles muted state), Switch to Video (sets videoEnabled=true), End Call (red)"
+    ]
+  },
+  "video_mode_ui": {
+    "condition": "videoEnabled === true",
+    "layout": "Full dark screen (bg-gray-900) with:",
+    "elements": [
+      "Top bar: 'Video Call' label + minimize button",
+      "Main: VideoGrid showing remote participants + local participant",
+      "Bottom: CallControls bar — Mute, Video toggle, Screen Share, Participants list, End Call"
+    ]
+  },
+  "files": {
+    "call_provider": "apps/web/app/components/call/CallProvider.tsx",
+    "call_ui": "apps/web/app/components/call/CallUI.tsx",
+    "incoming_call_modal": "apps/web/app/components/call/IncomingCallModal.tsx",
+    "call_panel": "apps/web/app/components/call/CallPanel.tsx",
+    "active_call_bar": "apps/web/app/components/call/ActiveCallBar.tsx",
+    "call_controls": "apps/web/app/components/call/CallControls.tsx",
+    "video_grid": "apps/web/app/components/call/VideoGrid.tsx",
+    "video_tile": "apps/web/app/components/call/VideoTile.tsx",
+    "participant_list": "apps/web/app/components/call/ParticipantList.tsx",
+    "screen_share_view": "apps/web/app/components/call/ScreenShareView.tsx",
+    "livekit_lib": "apps/web/app/lib/livekit.ts",
+    "ws_server": "apps/web-socket/src/index.ts",
+    "api_initiate": "apps/web/app/api/calls/initiate/route.ts",
+    "api_accept": "apps/web/app/api/calls/[id]/accept/route.ts",
+    "api_reject": "apps/web/app/api/calls/[id]/reject/route.ts",
+    "api_end": "apps/web/app/api/calls/[id]/end/route.ts",
+    "api_token": "apps/web/app/api/calls/token/route.ts",
+    "api_webhook": "apps/web/app/api/calls/livekit-webhook/route.ts",
+    "api_health": "apps/web/app/api/calls/health/route.ts",
+    "api_push_subscribe": "apps/web/app/api/calls/push-subscribe/route.ts",
+    "provider_wrapper": "apps/web/provider.tsx",
+    "schema": "apps/web/prisma/schema.prisma"
+  },
+  "env_vars": {
+    "LIVEKIT_API_KEY": "LiveKit Cloud API key",
+    "LIVEKIT_API_SECRET": "LiveKit Cloud API secret",
+    "LIVEKIT_HOST": "https://ko-lab-5s9w0dn1.livekit.cloud",
+    "NEXT_PUBLIC_LIVEKIT_URL": "wss://ko-lab-5s9w0dn1.livekit.cloud",
+    "NEXT_PUBLIC_WS_URL": "WebSocket server URL (ws://localhost:8080/ws for dev)",
+    "WS_ALLOWED_ORIGINS": "Comma-separated allowed origins for WS connections",
+    "NEXT_PUBLIC_WEB_SOCKET_URL": "Deprecated — use NEXT_PUBLIC_WS_URL instead"
+  },
+  "known_limitations": [
+    "No push notifications for incoming calls when user is offline",
+    "No call history/log UI",
+    "No call recording UI (DB model exists but unused)",
+    "No call timeout for unanswered RINGING calls",
+    "ScreenShareView has a TypeScript type error (ScreenShareView.tsx:17)",
+    "No mobile-responsive call UI"
+  ]
+}

@@ -63,6 +63,128 @@ const wss = new WebSocketServer({
 const groupClients = new Map<string, Map<string, WebSocket>>();
 const individualClients = new Map<string, WebSocket>();
 
+// ── Call signaling helper ────────────────────────────────────────────────────
+function handleCallSignal(ws: WebSocket, msg: any, senderId: string) {
+  switch (msg.type) {
+    case "call_offer": {
+      if (msg.groupId) {
+        // Broadcast to all connected group members
+        const members = groupClients.get(msg.groupId);
+        if (members) {
+          const outbound = JSON.stringify({
+            type: "call_offer",
+            callId: msg.callId,
+            roomName: msg.roomName,
+            callerId: senderId,
+            callerName: msg.callerName,
+            callType: msg.callType,
+            groupId: msg.groupId,
+          });
+          for (const [mid, mws] of members) {
+            if (mid !== senderId && mws.readyState === WebSocket.OPEN) {
+              mws.send(outbound);
+            }
+          }
+        }
+      } else if (msg.targetId) {
+        // Route to specific recipient
+        const targetWs = individualClients.get(msg.targetId);
+        if (targetWs?.readyState === WebSocket.OPEN) {
+          targetWs.send(JSON.stringify({
+            type: "call_offer",
+            callId: msg.callId,
+            roomName: msg.roomName,
+            callerId: senderId,
+            callerName: msg.callerName,
+            callType: msg.callType,
+            targetId: msg.targetId,
+          }));
+          ws.send(JSON.stringify({ type: "call_offered", callId: msg.callId }));
+        } else {
+          ws.send(JSON.stringify({
+            type: "error",
+            message: "Recipient not connected",
+            callId: msg.callId,
+          }));
+        }
+      }
+      break;
+    }
+
+    case "call_accepted": {
+      const initiatorWs = individualClients.get(msg.initiatorId);
+      if (initiatorWs?.readyState === WebSocket.OPEN) {
+        initiatorWs.send(JSON.stringify({
+          type: "call_accepted",
+          callId: msg.callId,
+          roomName: msg.roomName,
+          token: msg.token,
+          participantId: senderId,
+        }));
+      }
+      break;
+    }
+
+    case "call_rejected": {
+      const initiatorWs = individualClients.get(msg.initiatorId);
+      if (initiatorWs?.readyState === WebSocket.OPEN) {
+        initiatorWs.send(JSON.stringify({
+          type: "call_rejected",
+          callId: msg.callId,
+          reason: msg.reason || "rejected",
+        }));
+      }
+      break;
+    }
+
+    case "call_ended": {
+      // Broadcast to all participants if groupId provided
+      if (msg.groupId) {
+        const members = groupClients.get(msg.groupId);
+        if (members) {
+          const outbound = JSON.stringify({
+            type: "call_ended",
+            callId: msg.callId,
+            endedBy: senderId,
+          });
+          for (const [mid, mws] of members) {
+            if (mid !== senderId && mws.readyState === WebSocket.OPEN) {
+              mws.send(outbound);
+            }
+          }
+        }
+      }
+      // Also notify individual participant if targetId provided
+      if (msg.targetId) {
+        const targetWs = individualClients.get(msg.targetId);
+        if (targetWs?.readyState === WebSocket.OPEN) {
+          targetWs.send(JSON.stringify({
+            type: "call_ended",
+            callId: msg.callId,
+            endedBy: senderId,
+          }));
+        }
+      }
+      break;
+    }
+
+    case "call_missed": {
+      const callerWs = individualClients.get(msg.callerId);
+      if (callerWs?.readyState === WebSocket.OPEN) {
+        callerWs.send(JSON.stringify({
+          type: "call_missed",
+          callId: msg.callId,
+          targetId: senderId,
+        }));
+      }
+      break;
+    }
+
+    default:
+      ws.send(JSON.stringify({ type: "error", message: "Unknown call signal type" }));
+  }
+}
+
 // ── Server-side heartbeat (detects and removes zombie connections) ───────────
 // Many proxies/load balancers kill idle TCP connections after 60s.
 // Ping every 30s; terminate any client that doesn't pong back.
@@ -169,6 +291,33 @@ wss.on("connection", (ws, req) => {
             readBy: userId,
           }));
         }
+        return;
+      }
+
+      // ── Group context registration ────────────────────────────────────
+      if (parsedMessage.type === "join_group" && parsedMessage.groupId) {
+        const gId = parsedMessage.groupId;
+        if (!groupClients.has(gId)) {
+          groupClients.set(gId, new Map());
+        }
+        groupClients.get(gId)!.set(userId, ws);
+        ws.send(JSON.stringify({ type: "joined_group", groupId: gId }));
+        return;
+      }
+
+      if (parsedMessage.type === "leave_group" && parsedMessage.groupId) {
+        const gId = parsedMessage.groupId;
+        const members = groupClients.get(gId);
+        if (members) {
+          members.delete(userId);
+          if (members.size === 0) groupClients.delete(gId);
+        }
+        return;
+      }
+
+      // ── Call signaling ─────────────────────────────────────────────────
+      if (parsedMessage.type.startsWith("call_")) {
+        handleCallSignal(ws, parsedMessage, userId);
         return;
       }
 

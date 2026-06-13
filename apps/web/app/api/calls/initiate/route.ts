@@ -44,7 +44,7 @@ export async function POST(req: Request) {
       },
     });
 
-    const token = await createLiveKitToken(session.user.id, roomName);
+    const token = await createLiveKitToken(session.user.id, roomName, true, session.user.name ?? undefined);
 
     return NextResponse.json({
       callRoom,

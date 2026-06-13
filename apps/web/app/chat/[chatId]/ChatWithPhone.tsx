@@ -56,6 +56,7 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
   const [userId, setUserId] = useState(""); // my phone number
   const [guestData, setGuestData] = useState<GuestData | null>(null);
   const [recipientName, setRecipientName] = useState<string>("");
+  const [recipientId, setRecipientId] = useState<string>("");
   const [newMsgDividerIndex, setNewMsgDividerIndex] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -139,11 +140,12 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
       }
     };
 
-    const fetchRecipientName = async () => {
+    const fetchRecipient = async () => {
       try {
         const res = await fetch(`/api/get-user-number?phone=${phone}`);
         const data = await res.json();
         setRecipientName(res.ok && data.name ? data.name : phone);
+        setRecipientId(res.ok && data.id ? data.id : "");
       } catch {
         setRecipientName(phone);
       }
@@ -151,7 +153,7 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
 
     if (status === "authenticated") {
       fetchUserPhone();
-      fetchRecipientName();
+      fetchRecipient();
     }
   }, [status, session?.user?.email, phone]);
 
@@ -389,16 +391,16 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => initiateCall("AUDIO", undefined, undefined)}
-            disabled={isCalling}
+            onClick={() => initiateCall("AUDIO", recipientId, undefined)}
+            disabled={isCalling || !recipientId}
             title="Audio call"
             className="p-2 rounded-full bg-green-500 hover:bg-green-400 text-white transition disabled:opacity-40"
           >
             <Phone className="w-4 h-4" />
           </button>
           <button
-            onClick={() => initiateCall("VIDEO", undefined, undefined)}
-            disabled={isCalling}
+            onClick={() => initiateCall("VIDEO", recipientId, undefined)}
+            disabled={isCalling || !recipientId}
             title="Video call"
             className="p-2 rounded-full bg-blue-500 hover:bg-blue-400 text-white transition disabled:opacity-40"
           >

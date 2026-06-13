@@ -58,7 +58,7 @@ function sendBrowserNotification(title: string, body: string) {
 
 const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const { data: session, status } = useSession();
-  const { initiateCall, isCalling } = useCall();
+  const { initiateCall, isCalling, joinGroup, leaveGroup } = useCall();
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -100,6 +100,12 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   const senderName = session?.user?.name;
   const isOwner = session?.user?.id === groupDetails?.ownerId;
   const githubRepo = groupDetails?.githubRepo;
+
+  // Register group for call signaling so this user receives group call offers
+  useEffect(() => {
+    joinGroup(group);
+    return () => leaveGroup();
+  }, [group, joinGroup, leaveGroup]);
 
   // Close menu on outside click
   useEffect(() => {

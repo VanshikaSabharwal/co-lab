@@ -35,7 +35,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       data: { joinedAt: new Date() },
     });
 
-    const token = await createLiveKitToken(session.user.id, callRoom.livekitRoom);
+    const token = await createLiveKitToken(session.user.id, callRoom.livekitRoom, true, session.user.name ?? undefined);
 
     return NextResponse.json({
       token,

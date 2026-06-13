@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCall } from "./CallProvider";
 import IncomingCallModal from "./IncomingCallModal";
 import ActiveCallBar from "./ActiveCallBar";
@@ -9,6 +9,12 @@ import CallPanel from "./CallPanel";
 export default function CallUI() {
   const { incomingCall, activeCall } = useCall();
   const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (activeCall) {
+      setExpanded(true);
+    }
+  }, [!!activeCall]);
 
   if (!incomingCall && !activeCall) return null;
 

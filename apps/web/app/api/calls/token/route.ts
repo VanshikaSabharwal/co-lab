@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const token = await createLiveKitToken(identity, roomName);
+    const token = await createLiveKitToken(identity, roomName, true, session.user.name ?? undefined);
     return NextResponse.json({ token }, { status: 200 });
   } catch (error) {
     console.error("Token generation error:", error);

@@ -1,16 +1,20 @@
-import { AccessToken } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY!;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET!;
 const LIVEKIT_HOST = process.env.LIVEKIT_HOST || "http://localhost:7880";
 
+const roomService = new RoomServiceClient(LIVEKIT_HOST, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+
 export async function createLiveKitToken(
   identity: string,
   roomName: string,
   canPublish: boolean = true,
+  name?: string,
 ): Promise<string> {
   const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity,
+    name,
     ttl: "10m",
   });
 
@@ -25,34 +29,20 @@ export async function createLiveKitToken(
 }
 
 export async function ensureLiveKitRoom(roomName: string) {
-  const response = await fetch(`${LIVEKIT_HOST}/twirp/livekit.RoomService/CreateRoom`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${await createLiveKitToken("server", roomName)}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  try {
+    await roomService.createRoom({
       name: roomName,
-      empty_timeout: 300,
-    }),
-  });
-
-  if (!response.ok && response.status !== 409) {
-    throw new Error(`Failed to create LiveKit room: ${response.statusText}`);
+      emptyTimeout: 300,
+    });
+  } catch (err: any) {
+    if (err?.status !== 409) throw err;
   }
 }
 
 export async function deleteLiveKitRoom(roomName: string) {
-  const response = await fetch(`${LIVEKIT_HOST}/twirp/livekit.RoomService/DeleteRoom`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${await createLiveKitToken("server", roomName)}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ room: roomName }),
-  });
-
-  if (!response.ok) {
-    console.error(`Failed to delete LiveKit room: ${response.statusText}`);
+  try {
+    await roomService.deleteRoom(roomName);
+  } catch (err) {
+    console.error("Failed to delete LiveKit room:", err);
   }
 }

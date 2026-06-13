@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Room } from "livekit-client";
 import { useSession } from "next-auth/react";
+import toast from "react-hot-toast";
 
 type CallType = "AUDIO" | "VIDEO" | "GROUP";
 
@@ -20,6 +21,7 @@ interface IncomingCall {
   callerId: string;
   callerName: string;
   type: CallType;
+  groupId?: string;
 }
 
 interface ActiveCall {
@@ -28,18 +30,21 @@ interface ActiveCall {
   type: CallType;
   token: string;
   room: Room | null;
+  groupId?: string;
 }
 
 interface CallContextValue {
   incomingCall: IncomingCall | null;
   activeCall: ActiveCall | null;
   initiateCall: (type: CallType, targetId?: string, groupId?: string) => Promise<void>;
-  acceptCall: (callId: string) => Promise<void>;
+  acceptCall: (callId: string, startWithVideo?: boolean) => Promise<void>;
   rejectCall: (callId: string) => Promise<void>;
   endCall: () => Promise<void>;
   setIncomingCall: (call: IncomingCall | null) => void;
   setActiveCall: (call: ActiveCall | null) => void;
   isCalling: boolean;
+  joinGroup: (groupId: string) => void;
+  leaveGroup: () => void;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -50,7 +55,7 @@ export function useCall() {
   return ctx;
 }
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws";
+const WS_BASE = (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws").replace(/\/ws$/, "");
 
 export function CallProvider({ children }: { children: ReactNode }) {
   const { data: session } = useSession();
@@ -58,6 +63,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
   const [isCalling, setIsCalling] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const activeCallRef = useRef(activeCall);
+  activeCallRef.current = activeCall;
+  const currentGroupRef = useRef<string | null>(null);
 
   // ── WebSocket connection for call signaling ──────────────────────────
   useEffect(() => {
@@ -70,12 +78,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
     function connect() {
       if (closed) return;
       try {
-        const ws = new WebSocket(WS_URL);
+        const ws = new WebSocket(`${WS_BASE}/ws?userId=${userId}`);
         wsRef.current = ws;
-
-        ws.onopen = () => {
-          ws.send(JSON.stringify({ type: "register", userId }));
-        };
 
         ws.onmessage = (event) => {
           try {
@@ -90,6 +94,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
           wsRef.current = null;
           if (!closed) {
             reconnectTimer = setTimeout(connect, 3000);
+          }
+        };
+
+        ws.onopen = () => {
+          if (currentGroupRef.current) {
+            ws.send(JSON.stringify({ type: "join_group", groupId: currentGroupRef.current }));
           }
         };
 
@@ -114,14 +124,24 @@ export function CallProvider({ children }: { children: ReactNode }) {
             type: msg.type === "GROUP" ? "GROUP" : msg.callType || "VIDEO",
           });
           break;
-        case "call_ended":
-          if (activeCall?.callId === msg.callId) {
-            activeCall.room?.disconnect();
+        case "call_ended": {
+          const ac = activeCallRef.current;
+          if (ac && ac.callId === msg.callId) {
+            ac.room?.disconnect();
             setActiveCall(null);
           }
           break;
+        }
+        case "call_accepted":
+          toast.success("Call accepted");
+          break;
+        case "call_rejected":
+          toast.error("Call rejected");
+          activeCallRef.current?.room?.disconnect();
+          setActiveCall(null);
+          break;
         case "call_missed":
-          // Could show a toast
+          toast.error("Call missed");
           break;
       }
     }
@@ -172,6 +192,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
+        audioCaptureDefaults: {},
         videoCaptureDefaults: {
           resolution: { width: 1280, height: 720 },
           facingMode: "user",
@@ -189,10 +210,20 @@ export function CallProvider({ children }: { children: ReactNode }) {
         type,
         token: data.token,
         room,
+        groupId,
       });
 
-      // Notify target via WebSocket
-      if (targetId) {
+      // Notify via WebSocket
+      if (groupId) {
+        wsSend({
+          type: "call_offer",
+          callId: data.callRoom.id,
+          roomName: data.roomName,
+          groupId,
+          callerName: session.user.name || session.user.email || "Unknown",
+          callType: type,
+        });
+      } else if (targetId) {
         wsSend({
           type: "call_offer",
           callId: data.callRoom.id,
@@ -210,7 +241,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   }, [session, wsSend]);
 
   // ── acceptCall ──────────────────────────────────────────────────────
-  const acceptCall = useCallback(async (callId: string) => {
+  const acceptCall = useCallback(async (callId: string, startWithVideo: boolean = true) => {
     try {
       const res = await fetch(`/api/calls/${callId}/accept`, {
         method: "PUT",
@@ -223,6 +254,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
+        audioCaptureDefaults: {},
         videoCaptureDefaults: {
           resolution: { width: 1280, height: 720 },
           facingMode: "user",
@@ -234,12 +266,17 @@ export function CallProvider({ children }: { children: ReactNode }) {
         data.token,
       );
 
+      if (!startWithVideo) {
+        room.localParticipant.setCameraEnabled(false);
+      }
+
       setActiveCall({
         callId: data.callId,
         roomName: data.roomName,
         type: incomingCall?.type || "VIDEO",
         token: data.token,
         room,
+        groupId: incomingCall?.groupId,
       });
 
       setIncomingCall(null);
@@ -291,10 +328,24 @@ export function CallProvider({ children }: { children: ReactNode }) {
       wsSend({
         type: "call_ended",
         callId: activeCall.callId,
+        ...(activeCall.groupId ? { groupId: activeCall.groupId } : {}),
       });
       setActiveCall(null);
     }
   }, [activeCall, wsSend]);
+
+  const joinGroup = useCallback((groupId: string) => {
+    currentGroupRef.current = groupId;
+    wsSend({ type: "join_group", groupId });
+  }, [wsSend]);
+
+  const leaveGroup = useCallback(() => {
+    const gId = currentGroupRef.current;
+    currentGroupRef.current = null;
+    if (gId) {
+      wsSend({ type: "leave_group", groupId: gId });
+    }
+  }, [wsSend]);
 
   return (
     <CallContext.Provider value={{
@@ -307,6 +358,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
       setIncomingCall,
       setActiveCall,
       isCalling,
+      joinGroup,
+      leaveGroup,
     }}>
       {children}
     </CallContext.Provider>
