@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
+import { getSessionUser, unauthorized, forbidden } from "../../lib/apiAuth";
 
 export async function POST(req: Request) {
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
+
   const { userId, groupId } = await req.json();
 
   if (!userId || !groupId) {
@@ -19,6 +23,11 @@ export async function POST(req: Request) {
 
     if (!groupExists) {
       return NextResponse.json({ error: "Group not found" }, { status: 404 });
+    }
+
+    // Only the group owner may add other users; anyone may add themselves
+    if (userId !== me.id && groupExists.ownerId !== me.id) {
+      return forbidden("Only the group owner can add other members");
     }
 
     // Check if the user is already a member of the group

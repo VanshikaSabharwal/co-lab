@@ -1,0 +1,91 @@
+"use client";
+
+import React, { useState } from "react";
+import { getNodesBounds, getViewportForBounds, useReactFlow } from "@xyflow/react";
+import { toPng } from "html-to-image";
+import { Undo2, Redo2, Magnet, ImageDown } from "lucide-react";
+import toast from "react-hot-toast";
+
+interface BoardToolbarProps {
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
+  snap: boolean;
+  onToggleSnap: () => void;
+}
+
+const btnCls =
+  "flex items-center gap-1.5 rounded-md border border-gray-700 bg-gray-800/90 px-2.5 py-1.5 text-xs text-gray-300 hover:border-blue-600/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
+
+export default function BoardToolbar({
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
+  snap,
+  onToggleSnap,
+}: BoardToolbarProps) {
+  const { getNodes } = useReactFlow();
+  const [exporting, setExporting] = useState(false);
+
+  const exportPng = async () => {
+    const nodes = getNodes();
+    if (!nodes.length) {
+      toast.error("Nothing to export yet");
+      return;
+    }
+    const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
+    if (!viewport) return;
+
+    setExporting(true);
+    try {
+      const bounds = getNodesBounds(nodes);
+      const width = Math.min(Math.max(Math.ceil(bounds.width) + 80, 320), 4096);
+      const height = Math.min(Math.max(Math.ceil(bounds.height) + 80, 240), 4096);
+      const vp = getViewportForBounds(bounds, width, height, 0.2, 2, 0.05);
+
+      const dataUrl = await toPng(viewport, {
+        backgroundColor: "#111827",
+        width,
+        height,
+        style: {
+          width: `${width}px`,
+          height: `${height}px`,
+          transform: `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`,
+        },
+      });
+
+      const link = document.createElement("a");
+      link.download = `ui-design-${new Date().toISOString().slice(0, 10)}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error("Export failed:", err);
+      toast.error("Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button className={btnCls} onClick={onUndo} disabled={!canUndo} title="Undo (structural changes)">
+        <Undo2 size={13} /> Undo
+      </button>
+      <button className={btnCls} onClick={onRedo} disabled={!canRedo} title="Redo">
+        <Redo2 size={13} /> Redo
+      </button>
+      <button
+        className={`${btnCls} ${snap ? "border-blue-600/60 text-blue-300" : ""}`}
+        onClick={onToggleSnap}
+        title="Snap to grid"
+      >
+        <Magnet size={13} /> Snap {snap ? "on" : "off"}
+      </button>
+      <button className={btnCls} onClick={exportPng} disabled={exporting} title="Export board as PNG">
+        <ImageDown size={13} /> {exporting ? "Exporting…" : "Export PNG"}
+      </button>
+    </div>
+  );
+}

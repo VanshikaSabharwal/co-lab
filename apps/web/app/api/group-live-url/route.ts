@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
+import { getSessionUser, isGroupMember, unauthorized, forbidden } from "../../lib/apiAuth";
 
 export async function POST(req: Request) {
   try {
-    const { groupId, liveUrl, userId } = await req.json();
+    const me = await getSessionUser();
+    if (!me) return unauthorized();
 
-    if (!groupId || liveUrl === undefined || !userId) {
+    const { groupId, liveUrl } = await req.json();
+
+    if (!groupId || liveUrl === undefined) {
       return NextResponse.json(
-        { error: "groupId, liveUrl, and userId are required" },
+        { error: "groupId and liveUrl are required" },
         { status: 400 },
       );
     }
@@ -21,7 +25,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Group not found" }, { status: 404 });
     }
 
-    if (group.ownerId !== userId) {
+    if (group.ownerId !== me.id) {
       return NextResponse.json(
         { error: "Only the group owner can update the live URL" },
         { status: 403 },
@@ -44,6 +48,9 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
+
   const { searchParams } = new URL(req.url);
   const groupId = searchParams.get("groupId");
 
@@ -55,6 +62,10 @@ export async function GET(req: Request) {
   }
 
   try {
+    if (!(await isGroupMember(groupId, me.id))) {
+      return forbidden("Not a member of this group");
+    }
+
     const group = await prisma.group.findUnique({
       where: { id: groupId },
       select: { liveUrl: true, ownerId: true },

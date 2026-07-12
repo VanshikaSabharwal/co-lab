@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import Cookies from "js-cookie";
 import { Phone, Video } from "lucide-react";
 import { useCall } from "../../components/call/CallProvider";
+import { fetchWsToken } from "../../lib/wsAuth";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
@@ -215,22 +216,22 @@ const ChatWithPhone: React.FC<ChatWithPhoneProps> = ({ phone }) => {
   }, [messages]);
 
   // ── WebSocket connection ─────────────────────────────────────────────────────
-  const getWebSocketUrl = () => {
-    if (!userId) return "";
-    if (process.env.NODE_ENV === "development") return `ws://localhost:8080/ws?userId=${userId}`;
-    return `${process.env.NEXT_PUBLIC_WEB_SOCKET_URL}/ws?userId=${userId}`;
+  const getWebSocketBase = () => {
+    if (process.env.NODE_ENV === "development") return "ws://localhost:8080";
+    return process.env.NEXT_PUBLIC_WEB_SOCKET_URL;
   };
 
   useEffect(() => {
     if (!userId) return;
     isMountedRef.current = true;
 
-    const connect = () => {
+    const connect = async () => {
       if (!isMountedRef.current) return;
-      const wsUrl = getWebSocketUrl();
-      if (!wsUrl) return;
+      // Tokens are short-lived, so fetch a fresh one on every (re)connect
+      const token = await fetchWsToken();
+      if (!token || !isMountedRef.current) return;
 
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(`${getWebSocketBase()}/ws?token=${token}`);
       wsRef.current = ws;
 
       ws.onopen = () => {

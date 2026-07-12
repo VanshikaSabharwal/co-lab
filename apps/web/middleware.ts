@@ -104,14 +104,22 @@ export function middleware(request: NextRequest) {
     return new NextResponse("Payload too large", { status: 413 });
   }
 
-  // ── Validate Content-Type on mutation requests ────────────────────────────
+  // ── Validate Content-Type on mutation requests that carry a body ──────────
+  // Bodyless mutations (e.g. PUT /api/calls/:id/accept) are legitimate and
+  // send no Content-Type, so only enforce the check when a body is present.
   if (
     (method === "POST" || method === "PUT" || method === "PATCH") &&
     pathname.startsWith("/api/") &&
     !pathname.startsWith("/api/auth/") // NextAuth uses application/x-www-form-urlencoded internally
   ) {
+    const contentLength = request.headers.get("content-length");
+    const hasBody = contentLength !== null && contentLength !== "0";
     const contentType = request.headers.get("content-type") || "";
-    if (!contentType.includes("application/json") && !contentType.includes("multipart/form-data")) {
+    if (
+      hasBody &&
+      !contentType.includes("application/json") &&
+      !contentType.includes("multipart/form-data")
+    ) {
       return new NextResponse("Unsupported Media Type", { status: 415 });
     }
   }

@@ -2,12 +2,13 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { TbSend } from "react-icons/tb";
-import { FaUserPlus, FaUsers, FaCrown } from "react-icons/fa";
+import { FaUserPlus, FaUsers, FaCrown, FaGithub, FaEdit } from "react-icons/fa";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Video } from "lucide-react";
+import { LayoutGrid, Video, Phone } from "lucide-react";
 import { useCall } from "../../components/call/CallProvider";
+import { fetchWsToken } from "../../lib/wsAuth";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
@@ -39,6 +40,7 @@ interface Message {
 interface GroupDetails {
   id: string;
   ownerId: string;
+  ownerName: string;
   githubRepo: string;
   groupName: string;
   liveUrl?: string;
@@ -77,6 +79,9 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
   // Delete confirm
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
 
   // Background
   const [chatBg, setChatBg] = useState(() =>
@@ -170,7 +175,6 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         try {
           const response = await fetch(`/api/create-group-data?group=${group}`);
           const data = await response.json();
-          console.log("[GroupDetails]", response.status, data);
           if (!response.ok) {
             console.error("Failed to fetch group details:", data);
             toast.error(data.error ?? "Failed to fetch group details");
@@ -215,14 +219,17 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
       fetchMembers();
       isMountedRef.current = true;
 
-      const wsUrl =
+      const wsBase =
         process.env.NODE_ENV === "development"
-          ? `ws://localhost:8080/ws?userId=${senderId}&groupId=${group}`
-          : `${process.env.NEXT_PUBLIC_WEB_SOCKET_URL}/ws?userId=${senderId}&groupId=${group}`;
+          ? "ws://localhost:8080"
+          : process.env.NEXT_PUBLIC_WEB_SOCKET_URL;
 
-      const connect = () => {
+      const connect = async () => {
         if (!isMountedRef.current) return;
-        const ws = new WebSocket(wsUrl);
+        // Tokens are short-lived, so fetch a fresh one on every (re)connect
+        const token = await fetchWsToken();
+        if (!token || !isMountedRef.current) return;
+        const ws = new WebSocket(`${wsBase}/ws?token=${token}&groupId=${group}`);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -332,6 +339,31 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
     toast.success("Chat cleared");
   };
 
+  const handleRenameGroup = async () => {
+    const name = renameValue.trim();
+    if (!name) return;
+    setRenaming(true);
+    try {
+      const res = await fetch("/api/create-group-data", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groupId: group, groupName: name }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setGroupDetails((prev) => (prev ? { ...prev, groupName: data.groupName } : prev));
+        toast.success("Group renamed");
+        setShowRenameModal(false);
+      } else {
+        toast.error(data.error ?? "Failed to rename group");
+      }
+    } catch {
+      toast.error("Failed to rename group");
+    } finally {
+      setRenaming(false);
+    }
+  };
+
   const handleChangeBg = (value: string) => {
     setChatBg(value);
     localStorage.setItem(`groupChatBg_${group}`, value);
@@ -401,7 +433,6 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
                 </span>
               )}
             </div>
-            <p className="text-xs text-gray-400 truncate">Github Repo · {groupDetails?.githubRepo ?? ""}</p>
             {groupDetails?.liveUrl && (
               <a
                 href={groupDetails.liveUrl}
@@ -419,6 +450,15 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Voice call — starts the same call (everyone joins muted, camera off) */}
+          <button
+            onClick={() => initiateCall("GROUP", undefined, group)}
+            disabled={isCalling}
+            title="Group voice call"
+            className="p-2 rounded-full bg-green-500 hover:bg-green-400 text-white transition disabled:opacity-40"
+          >
+            <Phone className="w-4 h-4" />
+          </button>
           <button
             onClick={() => initiateCall("GROUP", undefined, group)}
             disabled={isCalling}
@@ -461,6 +501,16 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
                 Code Editor
               </Link>
 
+              {/* Workspace */}
+              <Link
+                href={`/workspace/${group}`}
+                onClick={() => setMenuOpen(false)}
+                className="w-full flex items-center gap-2 px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                <LayoutGrid className="w-4 h-4" />
+                Workspace
+              </Link>
+
               {/* View Members */}
               <Link
                 href={`/viewMembers/${group}`}
@@ -470,6 +520,20 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
                 <FaUsers className="w-4 h-4" />
                 View Members
               </Link>
+
+              {/* GitHub Repo */}
+              {groupDetails?.githubRepo && (
+                <a
+                  href={`https://github.com/${groupDetails.ownerName}/${groupDetails.githubRepo}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMenuOpen(false)}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <FaGithub className="w-4 h-4" />
+                  GitHub Repo
+                </a>
+              )}
 
               {/* Live Site */}
               {groupDetails?.liveUrl && (
@@ -497,6 +561,21 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
                   <FaUserPlus className="w-4 h-4" />
                   Add Member
                 </Link>
+              )}
+
+              {/* Edit Group Name — owner only */}
+              {isOwner && (
+                <button
+                  onClick={() => {
+                    setRenameValue(groupDetails?.groupName ?? "");
+                    setShowRenameModal(true);
+                    setMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <FaEdit className="w-4 h-4" />
+                  Edit Group Name
+                </button>
               )}
 
               <div className="border-t border-gray-100 dark:border-gray-800" />
@@ -663,6 +742,38 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
           <TbSend size={18} />
         </button>
       </div>
+
+      {/* Rename group modal */}
+      {showRenameModal && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-900 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Edit Group Name</h3>
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleRenameGroup()}
+              placeholder="Group name"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-5"
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowRenameModal(false)}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRenameGroup}
+                disabled={renaming || !renameValue.trim()}
+                className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {renaming ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation modal */}
       {showDeleteConfirm && (

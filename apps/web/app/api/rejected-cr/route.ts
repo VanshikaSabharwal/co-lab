@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
+import { getSessionUser, unauthorized, forbidden } from "../../lib/apiAuth";
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get("userId");
-
-  if (!userId) {
-    return NextResponse.json(
-      { error: "User ID is required!" },
-      { status: 400 },
-    );
-  }
+export async function GET() {
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
 
   try {
     const rejectedNotifications = await prisma.rejectedCr.findMany({
-      where: { userId },
+      where: { userId: me.id },
       select: {
         id: true,
         userId: true,
@@ -40,6 +34,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
+
   const { message, userId, groupId, userName, groupName } = await req.json();
 
   if (!message || !userId || !groupId || !userName || !groupName) {
@@ -50,6 +47,18 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Only the group owner can reject a change request (which notifies its author)
+    const group = await prisma.group.findUnique({
+      where: { id: groupId },
+      select: { ownerId: true },
+    });
+    if (!group) {
+      return NextResponse.json({ error: "Group not found" }, { status: 404 });
+    }
+    if (group.ownerId !== me.id) {
+      return forbidden("Only the group owner can reject change requests");
+    }
+
     const notification = await prisma.rejectedCr.create({
       data: {
         userId,

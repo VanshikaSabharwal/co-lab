@@ -1,0 +1,153 @@
+{
+  "name": "ko-lab-code-editor-vcs-v1",
+  "version": "1.0.0",
+  "description": "Version control for the Ko-Lab code editor: DB drafts as the working tree, one GitHub branch + PR per change-request, merge delegated to GitHub. Decided in interview 2026-07-12.",
+
+  "decisions": {
+    "backbone": "Hybrid — ModifiedFiles table stays the live working tree; branches/history/merges live on GitHub via octokit (no server-side git clones)",
+    "branching_model": "Branch per change-request: cr/<username>/<n>, cut from the author's recorded baseSha (NOT head), then main merged in via GitHub's 3-way merge",
+    "conflict_strategy": "Delegate to GitHub: POST /repos/merges main→branch after commit; 409 = CONFLICT state, author re-applies against fresh main in the diff view. Poll PR mergeable (async!) before enabling Approve",
+    "attribution": "Commits made with the member's own OAuth token when they're a collaborator (session already holds githubAccessToken); fallback = owner token with git author set to the member",
+    "v1_features": ["branch switcher (read-only)", "in-app PR review with diff", "commit history viewer", "sync from GitHub", "in-app collaborator invites", "free-tier limits"]
+  },
+
+  "limits": {
+    "note": "Per member per group, enforced by counting rows in the window inside the submit routes. Values live here so subscription tiers can override.",
+    "free": {
+      "commits_per_day": 30,
+      "change_requests_per_week": 5
+    },
+    "paid_tiers": "TBD — same keys, bigger numbers, checked from subscription record"
+  },
+
+  "collaborator_flow": {
+    "membership_model": "Two-level: 'member' (chat/calls/workspace — joins immediately) vs 'code collaborator' (unlocked when the GitHub invite is accepted). Code editor shows 'Accept the GitHub invite to edit code' until then. Add-member sends both in one click.",
+    "invite": "Owner clicks add-member / member avatar → confirmation modal states plainly: 'sends {user} a GitHub invite for WRITE access to {repo} — once accepted they can push from anywhere, not just Ko-Lab' → PUT /repos/{owner}/{repo}/collaborators/{username} with owner token",
+    "accept_in_app": "Member sees pending invite in Ko-Lab → PATCH /user/repository_invitations/{id} with THEIR token → accepted without leaving the app",
+    "branch_protection": "Offered as a toggle in the same modal: require PRs on the default branch so write access can't bypass the CR flow",
+    "status_tracking": "Poll COLLABORATOR status (GET /repos/.../collaborators/{username} → 204/404) on group page load, not invitation status — invites accepted via GitHub email make the invitation object vanish",
+    "username_source": "Immutable GitHub account id from the OAuth Account row (providerAccountId); resolve current username at invite time (handles renames)",
+    "edge_cases": [
+      "Google-only signups have no GitHub identity — require a 'Connect GitHub' step before invite can be sent (biggest gap)",
+      "Invitations expire after 7 days / can be rescinded — Resend (delete + re-PUT) and Cancel buttons on pending members",
+      "Already a collaborator → PUT returns 204 with no invitation → mark accepted immediately",
+      "Org-owned repos may forbid outside collaborators → PUT 403s → fallback deep-link to https://github.com/{owner}/{repo}/settings/access",
+      "Member token missing repo scope → can't accept in-app → show 'check your GitHub email', reconcile via status polling",
+      "Removing a member → ask whether to also revoke repo access (DELETE .../collaborators/{username}) — otherwise ex-members keep write access",
+      "Group changes linked repo → all grants stale → re-invite wave",
+      "GitHub throttles repo invitations (~50/day) — surface a clear error on bulk adds"
+    ]
+  },
+
+  "github_linking": {
+    "canonical": "Manual OAuth link flow — GET /api/github/link redirects to GitHub authorize with HMAC-signed state carrying the session user id (reuse wsToken utility); /api/github/link/callback verifies state, exchanges code, writes the Account row for the SESSION user. Deterministic for all users regardless of email.",
+    "convenience": "allowDangerousEmailAccountLinking stays on only while providers are Google+GitHub (both verify emails); auto-links when emails happen to match. Turn OFF if any provider without verified email is ever added.",
+    "surfaces": [
+      "Profile page: Connect GitHub card with linked/unlinked state",
+      "Add-member modal: if target has no GitHub Account row → 'invite will be sent once they connect' (membership proceeds, invite queued as PENDING_GITHUB on the membership row)",
+      "Member banner in group/code editor: 'Connect GitHub to accept the code invite' → on link, fire the queued addCollaborator call automatically"
+    ],
+    "scaling_milestone": "Post-traction: migrate the integration from OAuth app to a GitHub App — per-installation rate limits (scales with group count instead of sharing the owner's 5k/h), short-lived tokens instead of stored PATs, repo-scoped permissions, org-friendly installs. Design the Account/Group rows so a provider row can later hold an installationId."
+  },
+
+  "branch_switcher_ux": {
+    "fetch": "GET /repos/{owner}/{repo}/branches via octokit (paginated 100/page), cached per group ~2 min",
+    "ui": "Header pill '⎇ <branch> ▾' next to repo name → searchable dropdown: default branch pinned with badge, then 'Your change requests' group, then all branches (type-ahead filter)",
+    "behavior": "Selecting a ref refetches the tree at that ref; non-CR branches show a read-only banner: 'Viewing <branch> — read-only. Your edits live on your change request.'"
+  },
+
+  "flows": {
+    "edit": "Member edits files → drafts saved per-user to ModifiedFiles with baseSha recorded at first edit (unchanged from today, plus baseSha)",
+    "submit_change_request": [
+      "1. Enforce limits: COUNT ChangeRequest rows for (member, group) in last 7d < 5; commits today < 30",
+      "2. Resolve repo default branch (do NOT assume 'main')",
+      "3. Create ref cr/<username>/<n> from the member's recorded baseSha via POST /git/refs — branch represents what the author actually saw",
+      "4. Build one commit from the member's drafts, using the MEMBER's token if collaborator (real authorship), else owner token with author=member (createTree/createCommit/updateRef on the CR branch)",
+      "5. Merge default branch INTO the CR branch via POST /repos/merges — GitHub 3-way merge kills base drift; on 409 mark CR CONFLICT and stop",
+      "6. Open PR base=default, head=cr branch; store prNumber; poll mergeable until non-null",
+      "7. Notify owner (existing notifications flow)"
+    ],
+    "review": "Owner opens CR in Ko-Lab → in-app diff (existing `diff` package or GitHub compare API) → Approve = merge PR via PUT /pulls/{n}/merge (squash) + delete branch; Reject = close PR + delete branch + rejectedCr notification (existing flow)",
+    "branch_switcher": "Dropdown lists open CR branches + default branch; selecting one loads that ref's file tree read-only (edits always happen on your own draft)",
+    "history": "Per-file: GET /commits?path=...; per-branch: GET /commits?sha=... — read-only viewer with 'restore this version into my draft'",
+    "sync": "On editor load compare stored headSha vs live head; if drifted show 'Repo changed — refresh files' banner. Prod: GitHub push webhook (HMAC-verified like the LiveKit webhook) → invalidate group file cache. Dev: compare-on-load only"
+  },
+
+  "schema_changes": {
+    "ChangeRequest": "NEW table: id, groupId, authorId, title, branchName, prNumber, status (OPEN|MERGED|REJECTED|CONFLICT), baseSha, createdAt — replaces overloading the notifications table as the CR queue",
+    "ModifiedFiles": "ADD baseSha String? — the blob sha of the file when the member started editing (drift detection)",
+    "Group": "ADD defaultBranch String? and headSha String? — cached, refreshed on sync"
+  },
+
+  "api_routes": [
+    "POST /api/vcs/change-request — create branch + commit drafts + open PR",
+    "GET  /api/vcs/branches?group= — list default + open CR branches",
+    "GET  /api/vcs/tree?group=&ref= — file tree at a ref (branch switcher)",
+    "GET  /api/vcs/diff?group=&pr= — PR diff for in-app review",
+    "POST /api/vcs/merge — owner-only; merge PR, delete branch, mark CR MERGED",
+    "POST /api/vcs/reject — owner-only; close PR, delete branch, mark CR REJECTED",
+    "GET  /api/vcs/history?group=&path=&ref= — commit history",
+    "POST /api/vcs/sync — refresh headSha + file cache; flag drifted drafts",
+    "POST /api/vcs/github-webhook — push events, HMAC-verified (prod only)"
+  ],
+
+  "risk_register": [
+    {
+      "problem": "Base drift — member edits a stale copy, CR branch is cut from NEWER main, their commit silently reverts other people's merged work",
+      "severity": "high",
+      "mitigation": "Record baseSha per draft at first edit. At CR submit, if the file's blob sha on main != baseSha, mark the draft DRIFTED and require the member to view the newer version and re-apply before the branch is created"
+    },
+    {
+      "problem": "Merge conflicts — PR mergeable=false",
+      "severity": "high",
+      "mitigation": "GitHub computes mergeability asynchronously (mergeable is null right after PR events — poll until it settles). If false: block Approve, set CR status CONFLICT, offer 'update from main' (POST /merges base→branch); if that 409s, author re-drafts from refreshed files"
+    },
+    {
+      "problem": "Attribution — all GitHub actions use the group owner's stored token, so members' commits look like the owner's",
+      "severity": "medium",
+      "mitigation": "Set git author to the member (name/email) with committer = token identity; note author in PR body. Long-term: members sign in with GitHub already — use their own session token for their CR branches when scopes allow"
+    },
+    {
+      "problem": "Token scope/expiry — stored PAT lacks repo write or PR scope, or expires; everything 401s",
+      "severity": "medium",
+      "mitigation": "Validate scopes at group creation (already partially done) AND at CR submit; surface a specific 'reconnect GitHub' error instead of a generic failure"
+    },
+    {
+      "problem": "Rate limits — 5000 req/h per token shared by the whole group",
+      "severity": "medium",
+      "mitigation": "Drafts never hit GitHub (DB only — already the design). Use tree API for one-commit-many-files (already done), conditional requests (ETags) for file listings, cache trees per headSha"
+    },
+    {
+      "problem": "Large repos / big files — contents API caps at 1 MB per file and recursive listing is N requests",
+      "severity": "medium",
+      "mitigation": "Switch listing to GET /git/trees/{sha}?recursive=1 (one request), fetch file bodies via blobs API, mark >1 MB and binary files read-only in the editor"
+    },
+    {
+      "problem": "Branch litter — abandoned cr/* branches accumulate",
+      "severity": "low",
+      "mitigation": "Delete branch on merge AND on reject; nightly-style cleanup can wait"
+    },
+    {
+      "problem": "Default-branch assumption — commit-changes hardcodes 'main' today; repos use master/trunk",
+      "severity": "low",
+      "mitigation": "Read default_branch from GET /repos/{owner}/{repo} once, cache on Group.defaultBranch"
+    },
+    {
+      "problem": "Webhook exposure — sync webhook needs a public URL and can be spoofed",
+      "severity": "low",
+      "mitigation": "Verify X-Hub-Signature-256 HMAC with a per-group secret (same pattern as the LiveKit webhook fix). In dev, rely on compare-on-load polling instead"
+    },
+    {
+      "problem": "Two members in one CR — drafts are per-user, so co-editing a single branch isn't supported",
+      "severity": "accepted",
+      "mitigation": "Out of scope for v1; a CR has exactly one author. Group co-editing stays in the live editor session"
+    }
+  ],
+
+  "phases": [
+    { "phase": 1, "scope": "ChangeRequest table + branch-and-PR creation on CR submit (replaces direct commit to main); approve = merge PR", "outcome": "main is never written directly by members again" },
+    { "phase": 2, "scope": "In-app PR review: diff view, approve/reject buttons, conflict state handling", "outcome": "owner never has to leave Ko-Lab to review" },
+    { "phase": 3, "scope": "Branch switcher (read-only ref browsing) + commit history viewer with restore-to-draft", "outcome": "editor understands refs, not just HEAD" },
+    { "phase": 4, "scope": "Sync: baseSha drift detection, refresh banner, push webhook in prod", "outcome": "stale-cache class of bugs eliminated" }
+  ]
+}

@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
+import { getSessionUser, isGroupMember, unauthorized, forbidden } from "../../lib/apiAuth";
 
 export async function POST(req: Request) {
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
+
   const { groupId, phoneNumber } = await req.json();
   if (!phoneNumber) {
     return NextResponse.json(
       { error: "Phone number is required" },
       { status: 400 },
     );
+  }
+  if (groupId && !(await isGroupMember(groupId, me.id))) {
+    return forbidden("Not a member of this group");
   }
   try {
     // Check if an invite with the same phone number already exists

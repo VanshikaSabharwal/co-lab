@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { FaUsers, FaPaperPlane, FaUserPlus } from "react-icons/fa";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import { fetchWsToken } from "../lib/wsAuth";
 
 interface GroupChatProps {
   group: string;
@@ -120,20 +121,18 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
 
       isMountedRef.current = true;
 
-      const wsUrl =
+      const wsBase =
         process.env.NODE_ENV === "development"
-          ? `ws://localhost:8080/ws?userId=${senderId}&groupId=${group}`
-          : `${process.env.NEXT_PUBLIC_WEB_SOCKET_URL}/ws?userId=${senderId}&groupId=${group}`;
+          ? "ws://localhost:8080"
+          : process.env.NEXT_PUBLIC_WEB_SOCKET_URL;
 
-      console.log("[WS] NODE_ENV:", process.env.NODE_ENV);
-      console.log("[WS] Connecting to URL:", wsUrl);
-      console.log("[WS] senderId:", senderId, "groupId:", group);
-
-      const connect = () => {
+      const connect = async () => {
         if (!isMountedRef.current) return;
 
-        console.log("[WS] Creating new WebSocket connection...");
-        const ws = new WebSocket(wsUrl);
+        // Tokens are short-lived, so fetch a fresh one on every (re)connect
+        const token = await fetchWsToken();
+        if (!token || !isMountedRef.current) return;
+        const ws = new WebSocket(`${wsBase}/ws?token=${token}&groupId=${group}`);
         wsRef.current = ws;
 
         ws.onopen = () => {

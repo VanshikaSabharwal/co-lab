@@ -1,5 +1,6 @@
 import React from "react";
 import prisma from "../../lib/prisma";
+import CollaboratorPanel from "./CollaboratorPanel";
 
 interface ViewMembersProps {
   groupId: string;
@@ -35,6 +36,9 @@ const ViewGroupMembers: React.FC<ViewMembersProps> = async ({ groupId }) => {
       ) : (
         <p>No members found.</p>
       )}
+
+      {/* Owner-only: code-access status + collaborator invites */}
+      <CollaboratorPanel groupId={groupId} />
     </div>
   );
 };

@@ -1,34 +1,37 @@
 import prisma from "../../lib/prisma";
 import { NextResponse } from "next/server";
+import { getSessionUserRecord, isGroupMember, unauthorized, forbidden } from "../../lib/apiAuth";
 
 export async function POST(req: Request) {
   try {
-    console.log("Received POST request");
+    const me = await getSessionUserRecord();
+    if (!me) return unauthorized();
 
     const body = await req.json();
-    console.log("Request body:", body);
 
     if (!body || typeof body !== "object") {
       throw new Error("Invalid request body");
     }
 
-    const { groupId, senderId, senderName, content } = body;
+    const { groupId, content } = body;
 
     if (!groupId || !content) {
       throw new Error("Missing required fields");
     }
 
+    if (!(await isGroupMember(groupId, me.id))) {
+      return forbidden("Not a member of this group");
+    }
+
     const createdMessage = await prisma.groupMessage.create({
       data: {
         groupId,
-        senderId: senderId || "",
-        senderName: senderName || "",
+        senderId: me.id,
+        senderName: me.name || "",
         message: content,
         createdAt: new Date(),
       },
     });
-
-    console.log("Created message:", createdMessage);
 
     return NextResponse.json(createdMessage, { status: 201 });
   } catch (error) {
@@ -41,11 +44,18 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
+  const me = await getSessionUserRecord();
+  if (!me) return unauthorized();
+
   const { searchParams } = new URL(req.url);
   const groupId = searchParams.get("group");
 
   if (!groupId) {
     return NextResponse.json({ error: "groupId is required" }, { status: 400 });
+  }
+
+  if (!(await isGroupMember(groupId, me.id))) {
+    return forbidden("Not a member of this group");
   }
 
   try {

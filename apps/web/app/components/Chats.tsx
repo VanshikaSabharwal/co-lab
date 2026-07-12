@@ -6,8 +6,8 @@ import FriendSearch from "../components/FriendSearch";
 import Notifications from "./Notifications";
 import { motion } from "framer-motion";
 import GroupChat from "../group/[groupId]/GroupChat";
+import ChatWithPhone from "../chat/[chatId]/ChatWithPhone";
 import PageTour from "./PageTour";
-import Link from "next/link";
 import { GrChat } from "react-icons/gr";
 import { Phone, Video } from "lucide-react";
 import { useCall } from "./call/CallProvider";
@@ -31,6 +31,7 @@ export default function Component() {
   const { initiateCall, isCalling } = useCall();
   const { data: session, status } = useSession();
   const [selectedChat, setSelectedChat] = useState<Group | null>(null);
+  const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [isMobileView, setIsMobileView] = useState(false);
@@ -75,7 +76,18 @@ export default function Component() {
     if (isMobileView) {
       window.location.href = `/group/${group.id}`;
     } else {
+      setSelectedFriend(null);
       setSelectedChat(group);
+    }
+  };
+
+  const handleFriendClick = (friend: Friend) => {
+    if (!friend.phone) return;
+    if (isMobileView) {
+      window.location.href = `/chat/${friend.phone}`;
+    } else {
+      setSelectedChat(null);
+      setSelectedFriend(friend);
     }
   };
 
@@ -160,7 +172,12 @@ export default function Component() {
               {friends.map((f) => (
                 <li
                   key={f.id}
-                  className="flex items-center justify-between py-1.5"
+                  onClick={() => handleFriendClick(f)}
+                  className={`flex items-center justify-between py-1.5 px-1 rounded-lg cursor-pointer transition-colors ${
+                    selectedFriend?.id === f.id
+                      ? "bg-indigo-50 dark:bg-indigo-900/30"
+                      : "hover:bg-gray-50 dark:hover:bg-gray-800"
+                  }`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
@@ -173,29 +190,38 @@ export default function Component() {
                   <div className="flex items-center gap-1">
                     {f.phone && (
                       <>
-                        <button
-                          onClick={() => initiateCall("AUDIO", f.id)}
+                        {/* <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            initiateCall("AUDIO", f.id);
+                          }}
                           disabled={isCalling}
                           title="Audio call"
                           className="p-1.5 bg-green-500 hover:bg-green-400 text-white rounded-full transition shrink-0 disabled:opacity-40"
                         >
                           <Phone className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => initiateCall("VIDEO", f.id)}
+                        </button> */}
+                        {/* <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            initiateCall("VIDEO", f.id);
+                          }}
                           disabled={isCalling}
                           title="Video call"
                           className="p-1.5 bg-blue-500 hover:bg-blue-400 text-white rounded-full transition shrink-0 disabled:opacity-40"
                         >
                           <Video className="w-3.5 h-3.5" />
-                        </button>
-                        <Link
-                          href={`/chat/${f.phone}`}
+                        </button> */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFriendClick(f);
+                          }}
                           title="Open chat"
                           className="p-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full transition shrink-0"
                         >
                           <GrChat className="w-3.5 h-3.5" />
-                        </Link>
+                        </button>
                       </>
                     )}
                   </div>
@@ -225,7 +251,7 @@ export default function Component() {
                   </div>
                   <div className="flex-1 min-w-0 overflow-hidden">
                     <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{group.groupName}</p>
-                    <a
+                    {/* <a
                       href={`https://github.com/${group.ownerName}/${group.githubRepo}`}
                       className="text-xs text-blue-500 hover:text-blue-400 truncate block"
                       onClick={(e) => e.stopPropagation()}
@@ -233,16 +259,16 @@ export default function Component() {
                       rel="noopener noreferrer"
                     >
                       {group.githubRepo}
-                    </a>
+                    </a> */}
                   </div>
-                  <button
+                  {/* <button
                     onClick={(e) => { e.stopPropagation(); initiateCall("GROUP", undefined, group.id); }}
                     disabled={isCalling}
                     title="Group video call"
                     className="p-1.5 bg-green-500 hover:bg-green-400 text-white rounded-full transition shrink-0 disabled:opacity-40"
                   >
                     <Video className="w-3.5 h-3.5" />
-                  </button>
+                  </button> */}
                 </li>
               ))}
             </ul>
@@ -261,9 +287,11 @@ export default function Component() {
       >
         {selectedChat ? (
           <GroupChat group={selectedChat.id} />
+        ) : selectedFriend?.phone ? (
+          <ChatWithPhone key={selectedFriend.id} phone={selectedFriend.phone} />
         ) : (
           <div className="text-gray-500 dark:text-gray-300 text-lg text-center mt-10">
-            Select a group to start chatting
+            Select a group or friend to start chatting
           </div>
         )}
       </motion.div>

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { Track, RoomEvent } from "livekit-client";
 import { useCall } from "./CallProvider";
 import { useScreenShare } from "./hooks/useScreenShare";
 import VideoGrid from "./VideoGrid";
 import CallControls from "./CallControls";
 import ParticipantList from "./ParticipantList";
 import ScreenShareView from "./ScreenShareView";
-import { X, Mic, MicOff, Video, VideoOff, PhoneOff } from "lucide-react";
+import { X } from "lucide-react";
 
 interface CallPanelProps {
   onMinimize: () => void;
@@ -16,19 +17,19 @@ interface CallPanelProps {
 export default function CallPanel({ onMinimize }: CallPanelProps) {
   const { activeCall, endCall } = useCall();
 
-  const [muted, setMuted] = useState(false);
-  const [videoEnabled, setVideoEnabled] = useState(() => {
-    if (!activeCall) return true;
-    return activeCall.type !== "AUDIO";
-  });
+  // Every call starts with mic and camera OFF — the user opts in.
+  const [muted, setMuted] = useState(true);
+  const [videoEnabled, setVideoEnabled] = useState(false);
+  // "Click here" hints show at the start and disappear for good once the user
+  // clicks that control for the first time.
+  const [micHintDismissed, setMicHintDismissed] = useState(false);
+  const [videoHintDismissed, setVideoHintDismissed] = useState(false);
   const [participantListOpen, setParticipantListOpen] = useState(false);
   const [screenShareOpen, setScreenShareOpen] = useState(false);
   const [participants, setParticipants] = useState<any[]>([]);
 
   const room = activeCall?.room ?? null;
   const { isSharing, startScreenShare, stopScreenShare } = useScreenShare(room);
-
-  const isAudioOnly = !videoEnabled;
 
   useEffect(() => {
     if (!room) return;
@@ -52,12 +53,31 @@ export default function CallPanel({ onMinimize }: CallPanelProps) {
     room.localParticipant.setCameraEnabled(videoEnabled);
   }, [videoEnabled, room]);
 
+  // Auto-open the screen-share view when anyone (local or remote) starts
+  // sharing, and close it when the share ends.
   useEffect(() => {
-    if (!room || !activeCall) return;
-    if (activeCall.type === "AUDIO") {
-      setVideoEnabled(false);
-    }
-  }, [room, activeCall]);
+    if (!room) return;
+    const hasActiveShare = () => {
+      const parts = [room.localParticipant, ...room.remoteParticipants.values()];
+      return parts.some((p) =>
+        [...p.trackPublications.values()].some(
+          (pub) => pub.source === Track.Source.ScreenShare,
+        ),
+      );
+    };
+    const sync = () => setScreenShareOpen(hasActiveShare());
+    sync();
+    room.on(RoomEvent.TrackSubscribed, sync);
+    room.on(RoomEvent.TrackUnsubscribed, sync);
+    room.on(RoomEvent.LocalTrackPublished, sync);
+    room.on(RoomEvent.LocalTrackUnpublished, sync);
+    return () => {
+      room.off(RoomEvent.TrackSubscribed, sync);
+      room.off(RoomEvent.TrackUnsubscribed, sync);
+      room.off(RoomEvent.LocalTrackPublished, sync);
+      room.off(RoomEvent.LocalTrackUnpublished, sync);
+    };
+  }, [room]);
 
   const handleToggleScreenShare = useCallback(() => {
     if (isSharing) {
@@ -69,75 +89,19 @@ export default function CallPanel({ onMinimize }: CallPanelProps) {
     }
   }, [isSharing, startScreenShare, stopScreenShare]);
 
-  const handleSwitchToVideo = () => {
-    setVideoEnabled(true);
-  };
-
   if (!activeCall) return null;
 
-  // ── Audio-only UI (black screen with controls) ──────────────────────
-  if (isAudioOnly) {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-black">
-        <div className="flex items-center justify-between px-4 py-2">
-          <span className="text-sm font-medium text-gray-400">Audio Call</span>
-          <button
-            onClick={onMinimize}
-            className="rounded-full p-1 text-gray-500 transition hover:bg-gray-800 hover:text-white"
-            title="Minimize"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="flex flex-1 flex-col items-center justify-center gap-6">
-          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gray-800">
-            <PhoneOff className="h-10 w-10 text-green-500 animate-pulse" />
-          </div>
-          <p className="text-xl font-semibold text-white">
-            {activeCall.type === "GROUP" ? "Group Call" : "Audio Call"}
-          </p>
-          <p className="text-sm text-gray-400">{participants.length + 1} participant(s)</p>
-        </div>
-
-        <div className="flex items-center justify-center gap-6 px-4 py-8">
-          <button
-            onClick={() => setMuted((m) => !m)}
-            className={`flex h-14 w-14 items-center justify-center rounded-full transition ${
-              muted ? "bg-red-500 text-white" : "bg-gray-700 text-white hover:bg-gray-600"
-            }`}
-            title={muted ? "Unmute" : "Mute"}
-          >
-            {muted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-          </button>
-
-          <button
-            onClick={handleSwitchToVideo}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-700 text-white transition hover:bg-gray-600"
-            title="Switch to Video"
-          >
-            <Video className="h-6 w-6" />
-          </button>
-
-          <button
-            onClick={endCall}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white transition hover:bg-red-700"
-            title="End Call"
-          >
-            <PhoneOff className="h-6 w-6" />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Video UI ─────────────────────────────────────────────────────────
+  // ── Unified call UI (always shown; camera off just shows avatars) ────
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-gray-900">
       {/* Header */}
       <div className="flex items-center justify-between bg-gray-800 px-4 py-2">
         <span className="text-sm font-medium text-white">
-          {activeCall.type === "VIDEO" ? "Video Call" : "Group Call"}
+          {activeCall.type === "VIDEO"
+            ? "Video Call"
+            : activeCall.type === "AUDIO"
+              ? "Audio Call"
+              : "Group Call"}
         </span>
         <button
           onClick={onMinimize}
@@ -179,8 +143,16 @@ export default function CallPanel({ onMinimize }: CallPanelProps) {
           videoEnabled={videoEnabled}
           screenSharing={isSharing}
           participantListOpen={participantListOpen}
-          onToggleMute={() => setMuted((m) => !m)}
-          onToggleVideo={() => setVideoEnabled((v) => !v)}
+          showMicHint={!micHintDismissed}
+          showVideoHint={!videoHintDismissed}
+          onToggleMute={() => {
+            setMicHintDismissed(true);
+            setMuted((m) => !m);
+          }}
+          onToggleVideo={() => {
+            setVideoHintDismissed(true);
+            setVideoEnabled((v) => !v);
+          }}
           onToggleScreenShare={handleToggleScreenShare}
           onToggleParticipantList={() => setParticipantListOpen((p) => !p)}
           onEndCall={endCall}

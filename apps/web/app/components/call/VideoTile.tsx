@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useEffect } from "react";
-import type { Participant, TrackPublication, RemoteTrack, RemoteTrackPublication } from "livekit-client";
-import { Track } from "livekit-client";
+import { useRef, useEffect, useReducer } from "react";
+import type { Participant, TrackPublication } from "livekit-client";
+import { Track, ParticipantEvent } from "livekit-client";
 import { MicOff, User } from "lucide-react";
 
 interface VideoTileProps {
@@ -13,6 +13,9 @@ interface VideoTileProps {
 export default function VideoTile({ participant, isLocal }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  // LiveKit mutates the participant object in place; force a re-render on its
+  // events so the getters below (isCameraEnabled, isSpeaking…) stay current.
+  const [, rerender] = useReducer((n: number) => n + 1, 0);
 
   const isSpeaking = participant.isSpeaking;
   const isMuted = participant.isMicrophoneEnabled === false;
@@ -29,39 +32,39 @@ export default function VideoTile({ participant, isLocal }: VideoTileProps) {
       if (pub.kind === Track.Kind.Video && videoEl) {
         pub.track.attach(videoEl);
       }
+      // Don't play your own mic back to yourself
       if (pub.kind === Track.Kind.Audio && audioEl && !isLocal) {
         pub.track.attach(audioEl);
       }
     }
 
-    function detach(pub: TrackPublication) {
-      pub.track?.detach();
+    // (Re)attach every current publication and re-render for the getters.
+    function sync() {
+      participant.trackPublications.forEach(attach);
+      rerender();
     }
 
-    // Attach already-subscribed tracks
-    participant.trackPublications.forEach(attach);
+    sync();
 
-    function onTrackPublished(publication: RemoteTrackPublication) {
-      if (publication.track) attach(publication);
-    }
-
-    function onTrackSubscribed(_track: RemoteTrack, publication: RemoteTrackPublication) {
-      attach(publication);
-    }
-
-    function onTrackUnsubscribed(_track: RemoteTrack, publication: RemoteTrackPublication) {
-      detach(publication);
-    }
-
-    participant.on("trackPublished", onTrackPublished);
-    participant.on("trackSubscribed", onTrackSubscribed);
-    participant.on("trackUnsubscribed", onTrackUnsubscribed);
+    // Local participant emits Local*; remote emits Track(Subscribed|Published).
+    // Listen to both sets so a single tile works for you and for others.
+    const events: ParticipantEvent[] = [
+      ParticipantEvent.TrackPublished,
+      ParticipantEvent.TrackSubscribed,
+      ParticipantEvent.TrackUnsubscribed,
+      ParticipantEvent.TrackMuted,
+      ParticipantEvent.TrackUnmuted,
+      ParticipantEvent.LocalTrackPublished,
+      ParticipantEvent.LocalTrackUnpublished,
+      ParticipantEvent.IsSpeakingChanged,
+    ];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    events.forEach((e) => participant.on(e as any, sync));
 
     return () => {
-      participant.off("trackPublished", onTrackPublished);
-      participant.off("trackSubscribed", onTrackSubscribed);
-      participant.off("trackUnsubscribed", onTrackUnsubscribed);
-      participant.trackPublications.forEach(detach);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      events.forEach((e) => participant.off(e as any, sync));
+      participant.trackPublications.forEach((pub) => pub.track?.detach());
     };
   }, [participant, isLocal]);
 
@@ -77,7 +80,7 @@ export default function VideoTile({ participant, isLocal }: VideoTileProps) {
         autoPlay
         playsInline
         muted={isLocal}
-        className={`h-full w-full object-cover ${hasVideo ? '' : 'hidden'}`}
+        className={`h-full w-full object-cover ${hasVideo ? "" : "hidden"}`}
       />
       {!hasVideo && (
         <div className="absolute inset-0 flex items-center justify-center">
@@ -92,7 +95,9 @@ export default function VideoTile({ participant, isLocal }: VideoTileProps) {
       <div className="absolute bottom-0 left-0 right-0 flex items-center gap-2 bg-gradient-to-t from-black/60 to-transparent p-2">
         {isMuted && <MicOff className="h-3.5 w-3.5 text-red-400" />}
         <span className="text-xs font-medium text-white">
-          {name}{identity !== name ? ` (${identity})` : ""}{isLocal ? " - You" : ""}
+          {name}
+          {identity !== name ? ` (${identity})` : ""}
+          {isLocal ? " - You" : ""}
         </span>
       </div>
     </div>

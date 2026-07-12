@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
+import { getSessionUser, unauthorized } from "../../lib/apiAuth";
 
 export async function POST(req: Request) {
-  const { name, path, userId, content, group } = await req.json();
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
 
-  if (!name || !path || !userId || !content || !group) {
+  const { name, path, content, group, baseSha } = await req.json();
+
+  if (!name || !path || !content || !group) {
     return NextResponse.json(
       { Error: "Missing required fields" },
       { status: 400 },
@@ -15,7 +19,7 @@ export async function POST(req: Request) {
     const modifiedFile = await prisma.modifiedFiles.upsert({
       where: {
         userId_groupId_path: {
-          userId,
+          userId: me.id,
           groupId: group,
           path,
         },
@@ -24,15 +28,18 @@ export async function POST(req: Request) {
         name,
         content,
         updatedAt: new Date(),
-        modifiedById: userId,
+        modifiedById: me.id,
+        // baseSha intentionally omitted — keep the sha from the first save so
+        // the CR branch stays anchored to what the author originally saw.
       },
       create: {
         name,
         path,
         content,
-        userId,
-        modifiedById: userId,
+        userId: me.id,
+        modifiedById: me.id,
         groupId: group,
+        baseSha: baseSha ?? null,
       },
     });
 
@@ -44,13 +51,11 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get("userId");
-  const group = searchParams.get("group");
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
 
-  if (!userId) {
-    return NextResponse.json({ Error: "UserId required" }, { status: 400 });
-  }
+  const { searchParams } = new URL(req.url);
+  const group = searchParams.get("group");
 
   if (!group) {
     return NextResponse.json({ Error: "Group required" }, { status: 400 });
@@ -60,7 +65,7 @@ export async function GET(req: Request) {
     const modifiedFiles = await prisma.modifiedFiles.findMany({
       where: {
         groupId: group,
-        OR: [{ userId: userId }, { group: { ownerId: userId } }],
+        OR: [{ userId: me.id }, { group: { ownerId: me.id } }],
       },
       orderBy: { createdAt: "asc" },
     });

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { Room, Participant, RemoteTrack, RemoteTrackPublication, TrackPublication } from "livekit-client";
-import { Track } from "livekit-client";
+import type { Room } from "livekit-client";
+import { Track, RoomEvent } from "livekit-client";
 
 interface ScreenShareViewProps {
   room: Room;
@@ -16,47 +16,43 @@ export default function ScreenShareView({ room, onClose }: ScreenShareViewProps)
     const videoEl = videoRef.current;
     if (!videoEl) return;
 
-    function attachScreenShare(publication: TrackPublication) {
-      if (publication.source === Track.Source.ScreenShare && publication.track) {
-        publication.track.attach(videoEl!);
+    // Find whoever is currently sharing (local OR remote) and attach it.
+    function attachActiveShare() {
+      const participants = [room.localParticipant, ...room.remoteParticipants.values()];
+      for (const p of participants) {
+        for (const pub of p.trackPublications.values()) {
+          if (pub.source === Track.Source.ScreenShare && pub.track) {
+            pub.track.attach(videoEl!);
+            return true;
+          }
+        }
       }
+      return false;
     }
 
-    function detachScreenShare(publication: TrackPublication) {
-      if (publication.source === Track.Source.ScreenShare) {
-        publication.track?.detach();
-      }
-    }
+    attachActiveShare();
 
-    // Track subscribed/unsubscribed handlers with correct LiveKit signatures
-    function onTrackSubscribed(_track: RemoteTrack, publication: RemoteTrackPublication) {
-      attachScreenShare(publication);
-    }
-
-    function onTrackUnsubscribed(_track: RemoteTrack, publication: RemoteTrackPublication) {
-      detachScreenShare(publication);
-    }
-
-    // Attach already-subscribed screen share tracks and subscribe to events
-    for (const p of room.remoteParticipants.values()) {
-      p.trackPublications.forEach(attachScreenShare);
-      p.on("trackSubscribed", onTrackSubscribed);
-      p.on("trackUnsubscribed", onTrackUnsubscribed);
-    }
-
-    // Also watch for new participants joining with screen share
-    function onParticipantConnected(p: Participant) {
-      p.trackPublications.forEach(attachScreenShare);
-      p.on("trackSubscribed", onTrackSubscribed);
-      p.on("trackUnsubscribed", onTrackUnsubscribed);
-    }
-    room.on("participantConnected", onParticipantConnected);
+    // Re-scan whenever any track changes — covers the sharer's own local track
+    // (LocalTrackPublished) and remote shares (TrackSubscribed).
+    const onChange = () => attachActiveShare();
+    room.on(RoomEvent.TrackSubscribed, onChange);
+    room.on(RoomEvent.TrackUnsubscribed, onChange);
+    room.on(RoomEvent.LocalTrackPublished, onChange);
+    room.on(RoomEvent.LocalTrackUnpublished, onChange);
+    room.on(RoomEvent.ParticipantConnected, onChange);
 
     return () => {
-      room.off("participantConnected", onParticipantConnected);
-      for (const p of room.remoteParticipants.values()) {
-        p.off("trackSubscribed", onTrackSubscribed);
-        p.off("trackUnsubscribed", onTrackUnsubscribed);
+      room.off(RoomEvent.TrackSubscribed, onChange);
+      room.off(RoomEvent.TrackUnsubscribed, onChange);
+      room.off(RoomEvent.LocalTrackPublished, onChange);
+      room.off(RoomEvent.LocalTrackUnpublished, onChange);
+      room.off(RoomEvent.ParticipantConnected, onChange);
+      // Detach any screen-share track from our element
+      const participants = [room.localParticipant, ...room.remoteParticipants.values()];
+      for (const p of participants) {
+        for (const pub of p.trackPublications.values()) {
+          if (pub.source === Track.Source.ScreenShare) pub.track?.detach(videoEl);
+        }
       }
     };
   }, [room]);
@@ -73,7 +69,8 @@ export default function ScreenShareView({ room, onClose }: ScreenShareViewProps)
         </button>
       </div>
       <div className="flex-1">
-        <video ref={videoRef} autoPlay className="h-full w-full object-contain" />
+        {/* muted so the sharer doesn't get audio feedback from their own share */}
+        <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-contain" />
       </div>
     </div>
   );

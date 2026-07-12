@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
+import { getSessionUserRecord, isGroupMember, unauthorized, forbidden } from "../../lib/apiAuth";
 
 export async function POST(req: Request) {
+  const me = await getSessionUserRecord();
+  if (!me) return unauthorized();
+
   const { searchParams } = new URL(req.url);
   const groupId = searchParams.get("group");
 
@@ -12,9 +16,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const { userId, userName, message } = await req.json();
+  const { message } = await req.json();
 
   try {
+    if (!(await isGroupMember(groupId, me.id))) {
+      return forbidden("Not a member of this group");
+    }
+
     const groupData = await prisma.group.findUnique({
       where: { id: groupId },
       include: {
@@ -32,11 +40,11 @@ export async function POST(req: Request) {
 
     const notification = await prisma.notifications.create({
       data: {
-        userId: userId,
+        userId: me.id,
         groupId: groupId,
         ownerId: ownerId,
         ownerName: ownerName,
-        userName: userName || "Unknown",
+        userName: me.name || "Unknown",
         groupName: groupName,
         message: message || "",
         createdAt: new Date(),
@@ -44,7 +52,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(
-      { success: true, notification, userId, ownerId, ownerName, groupName },
+      { success: true, notification, userId: me.id, ownerId, ownerName, groupName },
       { status: 201 },
     );
   } catch (error) {

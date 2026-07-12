@@ -1,8 +1,28 @@
 import { NextResponse } from "next/server";
+import { WebhookReceiver } from "livekit-server-sdk";
 import prisma from "../../../lib/prisma";
 
+const receiver = new WebhookReceiver(
+  process.env.LIVEKIT_API_KEY!,
+  process.env.LIVEKIT_API_SECRET!,
+);
+
 export async function POST(req: Request) {
-  const body = await req.json();
+  // LiveKit signs webhooks with a JWT in the Authorization header —
+  // reject anything that doesn't verify against our API secret.
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader) {
+    return NextResponse.json({ error: "Missing webhook signature" }, { status: 401 });
+  }
+
+  let body: { event?: string; room?: any; participant?: any };
+  try {
+    const rawBody = await req.text();
+    body = (await receiver.receive(rawBody, authHeader)) as typeof body;
+  } catch (err) {
+    console.error("LiveKit webhook signature verification failed:", err);
+    return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
+  }
 
   const { event, room, participant } = body;
 

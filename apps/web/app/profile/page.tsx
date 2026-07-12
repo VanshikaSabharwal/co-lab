@@ -16,6 +16,18 @@ type ProfileData = {
   connectedProviders: string[];
 };
 
+type GithubStatus = {
+  linked: boolean;
+  username?: string | null;
+  hasRepoScope?: boolean;
+};
+
+type RepoInvitation = {
+  id: number;
+  repo: string;
+  inviter: string;
+};
+
 export default function ProfilePage() {
   const { status } = useSession();
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -24,6 +36,67 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission>("default");
+  const [github, setGithub] = useState<GithubStatus | null>(null);
+  const [invitations, setInvitations] = useState<RepoInvitation[]>([]);
+  const [acceptingId, setAcceptingId] = useState<number | null>(null);
+
+  const loadGithub = async () => {
+    try {
+      const [statusRes, invitesRes] = await Promise.all([
+        fetch("/api/github/status"),
+        fetch("/api/github/invitations"),
+      ]);
+      if (statusRes.ok) setGithub(await statusRes.json());
+      if (invitesRes.ok) {
+        const data = await invitesRes.json();
+        setInvitations(data.invitations ?? []);
+      }
+    } catch {
+      /* non-fatal */
+    }
+  };
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    loadGithub();
+    // Surface the outcome of the GitHub link redirect
+    const params = new URLSearchParams(window.location.search);
+    const gh = params.get("github");
+    if (gh === "linked") {
+      toast.success(`GitHub connected as ${params.get("login") ?? "your account"}`);
+      window.history.replaceState({}, "", "/profile");
+    } else if (gh === "error") {
+      const reason = params.get("reason") ?? "unknown";
+      const msg =
+        reason === "github_account_taken"
+          ? "That GitHub account is already linked to another Ko-Lab user"
+          : "Couldn't connect GitHub — please try again";
+      toast.error(msg);
+      window.history.replaceState({}, "", "/profile");
+    }
+  }, [status]);
+
+  const acceptInvite = async (invitationId: number) => {
+    setAcceptingId(invitationId);
+    try {
+      const res = await fetch("/api/github/invitations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invitationId }),
+      });
+      if (res.ok) {
+        toast.success("Invitation accepted — you can now edit code");
+        setInvitations((prev) => prev.filter((i) => i.id !== invitationId));
+      } else {
+        const d = await res.json();
+        toast.error(d.error ?? "Failed to accept invitation");
+      }
+    } catch {
+      toast.error("Failed to accept invitation");
+    } finally {
+      setAcceptingId(null);
+    }
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -135,15 +208,30 @@ export default function ProfilePage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <FaGithub className="w-5 h-5 text-gray-900 dark:text-white" />
-                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">GitHub</span>
+                <div>
+                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200">GitHub</span>
+                  {github?.linked && github.username && (
+                    <span className="ml-1.5 text-xs text-gray-400">@{github.username}</span>
+                  )}
+                </div>
               </div>
-              {isGithubConnected ? (
-                <span className="flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400">
-                  <CheckCircle className="w-4 h-4" /> Connected
-                </span>
+              {github?.linked ? (
+                github.hasRepoScope ? (
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400">
+                    <CheckCircle className="w-4 h-4" /> Connected
+                  </span>
+                ) : (
+                  // Linked but token lacks the repo scope — must re-link to edit code
+                  <button
+                    onClick={() => (window.location.href = "/api/github/link")}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:opacity-90 transition"
+                  >
+                    Re-authorize
+                  </button>
+                )
               ) : (
                 <button
-                  onClick={() => signIn("github")}
+                  onClick={() => (window.location.href = "/api/github/link")}
                   className="text-xs font-medium px-3 py-1.5 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 hover:opacity-90 transition"
                 >
                   Connect
@@ -173,6 +261,34 @@ export default function ProfilePage() {
 
           </div>
         </div>
+
+        {/* Repository invitations */}
+        {invitations.length > 0 && (
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm p-6">
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+              Repository invitations
+            </h2>
+            <div className="space-y-3">
+              {invitations.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-800 dark:text-gray-200">
+                      {inv.repo}
+                    </p>
+                    <p className="text-xs text-gray-400">invited by @{inv.inviter}</p>
+                  </div>
+                  <button
+                    onClick={() => acceptInvite(inv.id)}
+                    disabled={acceptingId === inv.id}
+                    className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-60 transition"
+                  >
+                    {acceptingId === inv.id ? "Accepting…" : "Accept"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Edit profile */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm p-6">

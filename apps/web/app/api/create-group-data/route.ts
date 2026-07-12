@@ -1,19 +1,23 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { encrypt, decrypt } from "../../lib/encryption";
+import { encrypt } from "../../lib/encryption";
+import { getSessionUser, isGroupMember, unauthorized, forbidden } from "../../lib/apiAuth";
 
 const prisma = new PrismaClient();
 
 export async function POST(req: Request) {
   try {
+    const me = await getSessionUser();
+    if (!me) return unauthorized();
+
     const {
       groupName,
       githubRepo,
       githubOwnerName,
       githubAccessToken,
       sshKey,
-      ownerId,
     } = await req.json();
+    const ownerId = me.id;
 
     console.log("📩 Incoming Body:", {
       groupName,
@@ -39,12 +43,6 @@ export async function POST(req: Request) {
     if (!githubAccessToken)
       return NextResponse.json(
         { error: "GitHub access token is required" },
-        { status: 400 },
-      );
-
-    if (!ownerId)
-      return NextResponse.json(
-        { error: "Owner ID is required" },
         { status: 400 },
       );
 
@@ -128,6 +126,9 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
+    const me = await getSessionUser();
+    if (!me) return unauthorized();
+
     const url = new URL(req.url);
     const groupId = url.searchParams.get("group");
 
@@ -138,9 +139,28 @@ export async function GET(req: Request) {
       );
     }
 
-    // Fetch the group details by group ID
+    if (!(await isGroupMember(groupId, me.id))) {
+      return forbidden("Not a member of this group");
+    }
+
+    // Fetch only the non-sensitive group fields. The GitHub token and SSH key
+    // MUST NOT be sent to the browser — all GitHub calls are proxied
+    // server-side (see /api/files, /api/file-content, /api/vcs/*). Exposing
+    // them here would let any member exfiltrate the owner's repo credentials.
     const groupDetails = await prisma.group.findUnique({
       where: { id: groupId },
+      select: {
+        id: true,
+        groupName: true,
+        githubRepo: true,
+        ownerName: true,
+        ownerId: true,
+        liveUrl: true,
+        defaultBranch: true,
+        createdAt: true,
+        // A boolean flag is safe to expose; the key itself is not.
+        sshKey: true,
+      },
     });
 
     if (!groupDetails) {
@@ -150,24 +170,9 @@ export async function GET(req: Request) {
       );
     }
 
-    let decryptedAccessToken: string;
-    let decryptedSshKey: string | null = null;
-    try {
-      decryptedAccessToken = decrypt(groupDetails.githubAccessToken);
-      decryptedSshKey = groupDetails.sshKey ? decrypt(groupDetails.sshKey) : null;
-    } catch {
-      // Token may be stored unencrypted (legacy data) — return as-is
-      decryptedAccessToken = groupDetails.githubAccessToken;
-      decryptedSshKey = groupDetails.sshKey ?? null;
-    }
-
-    // Return the group details, including the decrypted tokens
+    const { sshKey, ...safe } = groupDetails;
     return NextResponse.json(
-      {
-        ...groupDetails,
-        githubAccessToken: decryptedAccessToken,
-        sshKey: decryptedSshKey,
-      },
+      { ...safe, hasSshKey: !!sshKey },
       { status: 200 },
     );
   } catch (err) {
@@ -181,13 +186,63 @@ export async function GET(req: Request) {
   }
 }
 
+// PATCH — rename a group (owner only)
+export async function PATCH(req: Request) {
+  try {
+    const me = await getSessionUser();
+    if (!me) return unauthorized();
+
+    const { groupId, groupName } = await req.json();
+
+    if (!groupId || !groupName?.trim()) {
+      return NextResponse.json(
+        { error: "groupId and a non-empty groupName are required" },
+        { status: 400 },
+      );
+    }
+
+    const group = await prisma.group.findUnique({
+      where: { id: groupId },
+      select: { ownerId: true },
+    });
+    if (!group) {
+      return NextResponse.json({ error: "Group not found" }, { status: 404 });
+    }
+    if (group.ownerId !== me.id) {
+      return NextResponse.json(
+        { error: "Only the group owner can rename this group" },
+        { status: 403 },
+      );
+    }
+
+    const updated = await prisma.group.update({
+      where: { id: groupId },
+      data: { groupName: groupName.trim() },
+      select: { groupName: true },
+    });
+
+    return NextResponse.json({ groupName: updated.groupName }, { status: 200 });
+  } catch (err: any) {
+    console.error("Error renaming group:", err);
+    return NextResponse.json(
+      { error: err.message ?? "Failed to rename group" },
+      { status: 500 },
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 export async function DELETE(req: Request) {
   try {
-    const { groupId, userId } = await req.json();
+    const me = await getSessionUser();
+    if (!me) return unauthorized();
 
-    if (!groupId || !userId) {
+    const { groupId } = await req.json();
+
+    if (!groupId) {
       return NextResponse.json(
-        { error: "Group ID and User ID are required" },
+        { error: "Group ID is required" },
         { status: 400 },
       );
     }
@@ -204,7 +259,7 @@ export async function DELETE(req: Request) {
       );
     }
 
-    if (group.ownerId !== userId) {
+    if (group.ownerId !== me.id) {
       return NextResponse.json(
         { error: "Only the group owner can delete this group" },
         { status: 403 },

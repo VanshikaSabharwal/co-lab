@@ -1,26 +1,20 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
+import { getSessionUser, unauthorized } from "../../lib/apiAuth";
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get("userId");
-
-  if (!userId) {
-    return NextResponse.json(
-      { error: "No User Id provided." },
-      { status: 400 },
-    );
-  }
+export async function GET() {
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
 
   try {
     // Use findMany to fetch all groups the user is a part of or owns
     const groups = await prisma.group.findMany({
       where: {
         OR: [
-          { ownerId: userId },
+          { ownerId: me.id },
           {
             members: {
-              some: { userId: userId },
+              some: { userId: me.id },
             },
           },
         ],

@@ -1,0 +1,107 @@
+{
+  "name": "ko-lab-workspaces-v1",
+  "version": "1.0.0",
+  "description": "Per-group 'Workspace' hub holding four live-collaborative project-thinking tools (mind map, planning & milestones, DB schema design, UI/UX design canvas) so teams don't need separate external tools (Miro, Notion, dbdiagram.io, Figma) for project planning.",
+  "motivation": "Centralize all thinking/design artifacts for a project in one place inside the Group, alongside the existing chat and code editor.",
+  "scope": {
+    "in_v1": [
+      "Mind map (freeform node/link canvas)",
+      "Planning & milestones (kanban board + milestone timeline)",
+      "DB schema design (standalone visual ERD, not Prisma-aware)",
+      "UI/UX design canvas (freeform wireframe using fixed UI-primitive node palette)"
+    ],
+    "explicitly_out_of_v1": [
+      "AI-generated README stays in the code editor, not moved into the Workspace hub",
+      "No CRDT (Yjs) — real-time sync uses simple operation broadcast + last-write-wins, matching existing WS server patterns",
+      "DB schema tool does not read/write apps/web/prisma/schema.prisma — pure documentation artifact",
+      "One board per type per group (no multi-board-per-type, no board templates/duplication)",
+      "No approval workflow for board edits — any group member edits freely, same trust level as group chat"
+    ]
+  },
+  "data_model": {
+    "new_enum": {
+      "WorkspaceBoardType": ["MIND_MAP", "PLANNING", "DB_SCHEMA", "UI_DESIGN"]
+    },
+    "new_model": {
+      "WorkspaceBoard": {
+        "id": "String @id @default(cuid())",
+        "groupId": "String",
+        "type": "WorkspaceBoardType",
+        "content": "Json — full board snapshot (React Flow {nodes, edges} for MIND_MAP/DB_SCHEMA/UI_DESIGN; {columns, cards, milestones} for PLANNING)",
+        "updatedAt": "DateTime @updatedAt",
+        "createdAt": "DateTime @default(now())",
+        "relations": "group Group @relation(\"GroupWorkspaceBoards\", fields: [groupId], references: [id])",
+        "constraints": ["@@unique([groupId, type])", "@@index([groupId])"]
+      }
+    },
+    "group_model_change": "add `workspaceBoards WorkspaceBoard[] @relation(\"GroupWorkspaceBoards\")` to existing Group model in apps/web/prisma/schema.prisma"
+  },
+  "persistence_strategy": {
+    "pattern": "JSON blob per board, upserted on debounced save",
+    "flow": "Client loads latest snapshot via GET, applies live ops from WS on top of it locally, debounces ~1.5s after the last local change before POSTing the full updated snapshot back (upsert by the [groupId, type] unique constraint). DB is not written on every keystroke/drag tick."
+  },
+  "realtime_sync": {
+    "pattern": "Operation broadcast over the existing apps/web-socket server — same family of patterns as join_group/leave_group, no new protocol or dependency",
+    "rooms": "New `workspaceClients: Map<string, Map<string, WebSocket>>` keyed by `${groupId}:${boardType}`, parallel to the existing `groupClients` map",
+    "new_ws_message_types": {
+      "join_workspace": "{ type: 'join_workspace', groupId, boardType } -> server registers ws in the room, replies with { type: 'workspace_presence', userIds: [...] }",
+      "leave_workspace": "{ type: 'leave_workspace', groupId, boardType } -> server removes ws from room, broadcasts updated presence to remaining members",
+      "workspace_op": "{ type: 'workspace_op', groupId, boardType, op } -> server rebroadcasts `op` verbatim to every other ws in the room (sender excluded)"
+    },
+    "op_shape_guidance": "Ops must be small deltas (e.g. { action: 'node_move', nodeId, x, y } or { action: 'card_add', columnId, card }), never the full board content — the WS server enforces an 8KB MAX_MESSAGE_SIZE_BYTES per message",
+    "cleanup": "On ws 'close', remove the connection from every workspace room it joined (mirrors existing groupClients cleanup-on-close behavior)"
+  },
+  "permissions": {
+    "rule": "Any GroupMember (ADMIN or MEMBER) can read and write any board in their group's workspace. No approval/change-request gate.",
+    "enforcement": "API routes verify the requesting user's session belongs to a GroupMember row for the groupId (same Prisma pattern as apps/web/app/api/check-group-member/route.ts), before reading or upserting WorkspaceBoard."
+  },
+  "navigation": {
+    "decision": "Own top-level route tree, mirroring how /code-editor/[groupId]/[githubRepo] already sits outside /group/[groupId]",
+    "routes": {
+      "/workspace/[groupId]": "Hub page — 4 tool cards (Mind Map, Planning & Milestones, DB Schema, UI/UX Design), each showing last-updated time and active-viewer avatars",
+      "/workspace/[groupId]/mind-map": "Mind map canvas",
+      "/workspace/[groupId]/planning": "Kanban board + milestone timeline",
+      "/workspace/[groupId]/db-schema": "ERD canvas",
+      "/workspace/[groupId]/ui-design": "Wireframe canvas"
+    },
+    "entry_point": "New 'Workspace' link/button added next to the existing 'Code Editor' link in apps/web/app/group/[groupId]/GroupChat.tsx (~line 454)"
+  },
+  "tech_choices": {
+    "mind_map": "@xyflow/react (React Flow) — simple labeled/colored sticky-note nodes, free edges",
+    "db_schema": "@xyflow/react with a custom TableNode (table name header + column rows showing name/type/PK/FK badges); edges represent relations, edge label = cardinality (1-1, 1-many, many-many)",
+    "ui_design": "@xyflow/react with a fixed palette of custom node types: Frame, Button, Text, Input, Image, Container — dragged from a palette onto the canvas, freely positioned/resized",
+    "planning": "Not React Flow — @dnd-kit/core + @dnd-kit/sortable for kanban drag-and-drop (new dependency), plus a simple horizontal milestone timeline list view; both share the same PLANNING board's content JSON",
+    "new_dependencies": ["@xyflow/react", "@dnd-kit/core", "@dnd-kit/sortable"]
+  },
+  "shared_frontend_pieces": {
+    "apps/web/app/workspace/components/WorkspaceCanvas.tsx": "Wraps React Flow; loads snapshot, applies remote ops via the WS hook, debounce-persists local changes",
+    "apps/web/app/workspace/components/PresenceBar.tsx": "Avatar stack driven by workspace_presence messages",
+    "apps/web/app/workspace/lib/useWorkspaceSocket.ts": "Hook: opens ws to NEXT_PUBLIC_WS_URL, sends join_workspace on mount / leave_workspace on unmount, exposes sendOp() and an onRemoteOp callback"
+  },
+  "api_routes": {
+    "GET /api/workspace/[groupId]/[type]": "Returns the WorkspaceBoard.content snapshot for that group+type (404 if never saved -> client falls back to an empty default board)",
+    "PUT /api/workspace/[groupId]/[type]": "Upserts WorkspaceBoard.content for that group+type; rejects if the session user is not a GroupMember"
+  },
+  "files_to_create": [
+    "apps/web/app/workspace/[groupId]/page.tsx",
+    "apps/web/app/workspace/[groupId]/mind-map/page.tsx",
+    "apps/web/app/workspace/[groupId]/planning/page.tsx",
+    "apps/web/app/workspace/[groupId]/db-schema/page.tsx",
+    "apps/web/app/workspace/[groupId]/ui-design/page.tsx",
+    "apps/web/app/workspace/components/WorkspaceCanvas.tsx",
+    "apps/web/app/workspace/components/PresenceBar.tsx",
+    "apps/web/app/workspace/lib/useWorkspaceSocket.ts",
+    "apps/web/app/api/workspace/[groupId]/[type]/route.ts"
+  ],
+  "files_to_modify": [
+    "apps/web/prisma/schema.prisma — add WorkspaceBoardType enum, WorkspaceBoard model, Group.workspaceBoards relation",
+    "apps/web-socket/src/index.ts — add workspaceClients room map and join_workspace/leave_workspace/workspace_op handlers",
+    "apps/web/app/group/[groupId]/GroupChat.tsx — add a 'Workspace' entry point near the existing Code Editor link"
+  ],
+  "known_limitations_v1": [
+    "Last-write-wins on the persisted snapshot — two users editing the exact same node within the same debounce window can clobber each other's saved state (live ops still show both users' moves in real time, only the periodic DB snapshot can race)",
+    "Planning board's tasks/milestones live inside one JSON blob, so they aren't individually queryable (e.g. can't yet power a 'tasks assigned to me' notification across groups) without a future normalization",
+    "No undo/redo",
+    "No per-node lock or live cursors — presence only shows who is viewing, not where their pointer is"
+  ]
+}

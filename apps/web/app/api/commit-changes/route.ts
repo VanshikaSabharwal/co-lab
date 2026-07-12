@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Octokit } from "@octokit/rest";
 import prisma from "../../lib/prisma";
 import { decrypt } from "../../lib/encryption";
+import { getSessionUser, unauthorized } from "../../lib/apiAuth";
 
 export async function GET() {
   return NextResponse.json(
@@ -12,10 +13,14 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, modifiedFiles, groupId, message } = await req.json();
+    const me = await getSessionUser();
+    if (!me) return unauthorized();
+    const userId = me.id;
+
+    const { modifiedFiles, groupId, message } = await req.json();
 
     // Validate required parameters
-    if (!userId || !modifiedFiles || !groupId || !message) {
+    if (!modifiedFiles || !groupId || !message) {
       return NextResponse.json(
         { message: "Missing required parameters" },
         { status: 400 },
@@ -57,11 +62,6 @@ export async function POST(req: NextRequest) {
         { status: 401 },
       );
     }
-    console.log(
-      "GitHub Access Token:",
-      decrypt(groupDetails.group.githubAccessToken),
-    );
-
     // Initialize Octokit with Authorization header
     const octokit = new Octokit({
       auth: decrypt(groupDetails.group.githubAccessToken),
@@ -69,12 +69,6 @@ export async function POST(req: NextRequest) {
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
       },
-    });
-
-    // Add debugging middleware
-    octokit.hook.wrap("request", async (request, options) => {
-      console.log("Request headers:", options.headers);
-      return request(options);
     });
 
     // Verify GitHub token and check scopes

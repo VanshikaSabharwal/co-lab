@@ -1,21 +1,13 @@
 import { NextResponse } from "next/server";
 import prisma from "../../../lib/prisma";
+import { getSessionUser, unauthorized } from "../../../lib/apiAuth";
 
-// GET /api/direct-message/unread?phone=<myPhone>
-// Returns list of senders who have unread messages for this user, with count + last message
-export async function GET(req: Request) {
+// GET /api/direct-message/unread
+// Returns list of senders who have unread messages for the logged-in user, with count + last message
+export async function GET() {
   try {
-    const { searchParams } = new URL(req.url);
-    const myPhone = searchParams.get("phone");
-
-    if (!myPhone) return NextResponse.json({ error: "phone required" }, { status: 400 });
-
-    const me = await prisma.user.findUnique({
-      where: { phone: myPhone },
-      select: { id: true },
-    });
-
-    if (!me) return NextResponse.json({ unread: [] });
+    const me = await getSessionUser();
+    if (!me) return unauthorized();
 
     // Find all unread messages sent to me
     const unreadMessages = await prisma.messages.findMany({

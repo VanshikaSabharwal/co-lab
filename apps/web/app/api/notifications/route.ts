@@ -1,19 +1,16 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
+import { getSessionUser, unauthorized } from "../../lib/apiAuth";
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get("userId");
-
-  if (!userId) {
-    return NextResponse.json({ error: "No userId" }, { status: 400 });
-  }
+export async function GET() {
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
 
   try {
-    // Fetch notifications where userId is equal to ownerId
+    // Fetch notifications where the logged-in user is the owner
     const notifications = await prisma.notifications.findMany({
       where: {
-        ownerId: userId,
+        ownerId: me.id,
       },
       select: {
         // Select only the necessary fields

@@ -1,6 +1,8 @@
+import "dotenv/config";
 import WebSocket, { WebSocketServer } from "ws";
 import http from "http";
 import Express from "express";
+import { verifyWsToken } from "./wsToken";
 
 const app = Express();
 const port = 8080;
@@ -61,7 +63,53 @@ const wss = new WebSocketServer({
 });
 
 const groupClients = new Map<string, Map<string, WebSocket>>();
-const individualClients = new Map<string, WebSocket>();
+// A user can have several live sockets at once (call provider, group chat,
+// editor, DM…). Track ALL of them so individually-targeted messages such as
+// call_offer reach every tab/component, not just whichever connected last.
+const individualClients = new Map<string, Set<WebSocket>>();
+
+// Deliver an individually-targeted message to every open socket a user has.
+// Returns true if at least one socket received it.
+function sendToUser(userId: string, data: unknown): boolean {
+  const sockets = individualClients.get(userId);
+  if (!sockets || sockets.size === 0) return false;
+  const payload = typeof data === "string" ? data : JSON.stringify(data);
+  let delivered = false;
+  for (const s of sockets) {
+    if (s.readyState === WebSocket.OPEN) {
+      s.send(payload);
+      delivered = true;
+    }
+  }
+  return delivered;
+}
+
+// ── Workspace boards (mind map / planning / DB schema / UI design) ─────────
+// Rooms are keyed `${groupId}:${boardType}`, mirroring groupClients above.
+const WORKSPACE_BOARD_TYPES = new Set([
+  "MIND_MAP",
+  "PLANNING",
+  "DB_SCHEMA",
+  "UI_DESIGN",
+]);
+const workspaceClients = new Map<string, Map<string, WebSocket>>();
+const wsWorkspaceRoom = new Map<WebSocket, string>();
+
+function workspaceRoomKey(groupId: string, board: string) {
+  return `${groupId}:${board}`;
+}
+
+function broadcastWorkspacePresence(roomKey: string) {
+  const members = workspaceClients.get(roomKey);
+  if (!members) return;
+  const outbound = JSON.stringify({
+    type: "workspace_presence",
+    userIds: Array.from(members.keys()),
+  });
+  for (const memberWs of members.values()) {
+    if (memberWs.readyState === WebSocket.OPEN) memberWs.send(outbound);
+  }
+}
 
 // ── Call signaling helper ────────────────────────────────────────────────────
 function handleCallSignal(ws: WebSocket, msg: any, senderId: string) {
@@ -87,18 +135,17 @@ function handleCallSignal(ws: WebSocket, msg: any, senderId: string) {
           }
         }
       } else if (msg.targetId) {
-        // Route to specific recipient
-        const targetWs = individualClients.get(msg.targetId);
-        if (targetWs?.readyState === WebSocket.OPEN) {
-          targetWs.send(JSON.stringify({
-            type: "call_offer",
-            callId: msg.callId,
-            roomName: msg.roomName,
-            callerId: senderId,
-            callerName: msg.callerName,
-            callType: msg.callType,
-            targetId: msg.targetId,
-          }));
+        // Route to every socket the recipient has open
+        const delivered = sendToUser(msg.targetId, {
+          type: "call_offer",
+          callId: msg.callId,
+          roomName: msg.roomName,
+          callerId: senderId,
+          callerName: msg.callerName,
+          callType: msg.callType,
+          targetId: msg.targetId,
+        });
+        if (delivered) {
           ws.send(JSON.stringify({ type: "call_offered", callId: msg.callId }));
         } else {
           ws.send(JSON.stringify({
@@ -112,28 +159,22 @@ function handleCallSignal(ws: WebSocket, msg: any, senderId: string) {
     }
 
     case "call_accepted": {
-      const initiatorWs = individualClients.get(msg.initiatorId);
-      if (initiatorWs?.readyState === WebSocket.OPEN) {
-        initiatorWs.send(JSON.stringify({
-          type: "call_accepted",
-          callId: msg.callId,
-          roomName: msg.roomName,
-          token: msg.token,
-          participantId: senderId,
-        }));
-      }
+      sendToUser(msg.initiatorId, {
+        type: "call_accepted",
+        callId: msg.callId,
+        roomName: msg.roomName,
+        token: msg.token,
+        participantId: senderId,
+      });
       break;
     }
 
     case "call_rejected": {
-      const initiatorWs = individualClients.get(msg.initiatorId);
-      if (initiatorWs?.readyState === WebSocket.OPEN) {
-        initiatorWs.send(JSON.stringify({
-          type: "call_rejected",
-          callId: msg.callId,
-          reason: msg.reason || "rejected",
-        }));
-      }
+      sendToUser(msg.initiatorId, {
+        type: "call_rejected",
+        callId: msg.callId,
+        reason: msg.reason || "rejected",
+      });
       break;
     }
 
@@ -156,27 +197,21 @@ function handleCallSignal(ws: WebSocket, msg: any, senderId: string) {
       }
       // Also notify individual participant if targetId provided
       if (msg.targetId) {
-        const targetWs = individualClients.get(msg.targetId);
-        if (targetWs?.readyState === WebSocket.OPEN) {
-          targetWs.send(JSON.stringify({
-            type: "call_ended",
-            callId: msg.callId,
-            endedBy: senderId,
-          }));
-        }
+        sendToUser(msg.targetId, {
+          type: "call_ended",
+          callId: msg.callId,
+          endedBy: senderId,
+        });
       }
       break;
     }
 
     case "call_missed": {
-      const callerWs = individualClients.get(msg.callerId);
-      if (callerWs?.readyState === WebSocket.OPEN) {
-        callerWs.send(JSON.stringify({
-          type: "call_missed",
-          callId: msg.callId,
-          targetId: senderId,
-        }));
-      }
+      sendToUser(msg.callerId, {
+        type: "call_missed",
+        callId: msg.callId,
+        targetId: senderId,
+      });
       break;
     }
 
@@ -210,11 +245,20 @@ wss.on("connection", (ws, req) => {
     "unknown";
 
   const urlParams = new URLSearchParams(req.url?.split("?")[1] || "");
-  const userId = urlParams.get("userId");
   const groupId = urlParams.get("groupId");
+  const board = urlParams.get("board");
 
+  // ── Authentication: identity comes from a signed token, never from a
+  //    client-chosen userId param (which anyone could spoof) ───────────────
+  const token = urlParams.get("token");
+  if (!token) {
+    ws.close(1008, "Auth token required");
+    return;
+  }
+
+  const userId = verifyWsToken(token);
   if (!userId) {
-    ws.close(1008, "UserId required");
+    ws.close(1008, "Invalid or expired auth token");
     return;
   }
 
@@ -228,13 +272,25 @@ wss.on("connection", (ws, req) => {
   wsIsAlive.set(ws, true);
   ws.on("pong", () => wsIsAlive.set(ws, true));
 
-  individualClients.set(userId, ws);
+  // Register this socket among the user's live connections (not overwrite)
+  if (!individualClients.has(userId)) individualClients.set(userId, new Set());
+  individualClients.get(userId)!.add(ws);
 
   if (groupId && /^[a-zA-Z0-9_-]{1,64}$/.test(groupId)) {
     if (!groupClients.has(groupId)) {
       groupClients.set(groupId, new Map());
     }
     groupClients.get(groupId)!.set(userId, ws);
+  }
+
+  if (groupId && board && /^[a-zA-Z0-9_-]{1,64}$/.test(groupId) && WORKSPACE_BOARD_TYPES.has(board)) {
+    const roomKey = workspaceRoomKey(groupId, board);
+    if (!workspaceClients.has(roomKey)) {
+      workspaceClients.set(roomKey, new Map());
+    }
+    workspaceClients.get(roomKey)!.set(userId, ws);
+    wsWorkspaceRoom.set(ws, roomKey);
+    broadcastWorkspacePresence(roomKey);
   }
 
   ws.send(
@@ -283,14 +339,11 @@ wss.on("connection", (ws, req) => {
 
       // ── Read receipt: recipient tells sender messages were read ────────
       if (parsedMessage.type === "read_receipt") {
-        const senderWs = individualClients.get(parsedMessage.senderId);
-        if (senderWs && senderWs.readyState === WebSocket.OPEN) {
-          senderWs.send(JSON.stringify({
-            type: "read_receipt",
-            chatId: parsedMessage.chatId,
-            readBy: userId,
-          }));
-        }
+        sendToUser(parsedMessage.senderId, {
+          type: "read_receipt",
+          chatId: parsedMessage.chatId,
+          readBy: userId,
+        });
         return;
       }
 
@@ -315,6 +368,21 @@ wss.on("connection", (ws, req) => {
         return;
       }
 
+      // ── Workspace board operation broadcast ────────────────────────────
+      if (parsedMessage.type === "workspace_op" && parsedMessage.groupId && parsedMessage.board) {
+        const roomKey = workspaceRoomKey(parsedMessage.groupId, parsedMessage.board);
+        const members = workspaceClients.get(roomKey);
+        if (members?.has(userId)) {
+          const outbound = JSON.stringify({ type: "workspace_op", op: parsedMessage.op });
+          for (const [memberId, memberWs] of members) {
+            if (memberId !== userId && memberWs.readyState === WebSocket.OPEN) {
+              memberWs.send(outbound);
+            }
+          }
+        }
+        return;
+      }
+
       // ── Call signaling ─────────────────────────────────────────────────
       if (parsedMessage.type.startsWith("call_")) {
         handleCallSignal(ws, parsedMessage, userId);
@@ -335,17 +403,14 @@ wss.on("connection", (ws, req) => {
 
       // One-to-one messaging
       if (parsedMessage.recipientId) {
-        const recipientWs = individualClients.get(parsedMessage.recipientId);
-        if (recipientWs && recipientWs.readyState === WebSocket.OPEN) {
-          recipientWs.send(
-            JSON.stringify({
-              chatId: parsedMessage.chatId,
-              senderId: userId,
-              recipientId: parsedMessage.recipientId,
-              content: parsedMessage.content,
-              timestamp: parsedMessage.timestamp || Date.now(),
-            }),
-          );
+        const delivered = sendToUser(parsedMessage.recipientId, {
+          chatId: parsedMessage.chatId,
+          senderId: userId,
+          recipientId: parsedMessage.recipientId,
+          content: parsedMessage.content,
+          timestamp: parsedMessage.timestamp || Date.now(),
+        });
+        if (delivered) {
           ws.send(
             JSON.stringify({
               type: "message_delivered",
@@ -401,13 +466,30 @@ wss.on("connection", (ws, req) => {
 
     clearInterval(rateLimitWindow);
 
-    if (individualClients.get(userId) === ws) {
-      individualClients.delete(userId);
+    // Remove just this socket from the user's set (they may have others open)
+    const userSockets = individualClients.get(userId);
+    if (userSockets) {
+      userSockets.delete(ws);
+      if (userSockets.size === 0) individualClients.delete(userId);
     }
     for (const [gId, clients] of groupClients.entries()) {
       if (clients.has(userId)) {
         clients.delete(userId);
         if (clients.size === 0) groupClients.delete(gId);
+      }
+    }
+
+    const roomKey = wsWorkspaceRoom.get(ws);
+    if (roomKey) {
+      wsWorkspaceRoom.delete(ws);
+      const members = workspaceClients.get(roomKey);
+      if (members) {
+        members.delete(userId);
+        if (members.size === 0) {
+          workspaceClients.delete(roomKey);
+        } else {
+          broadcastWorkspacePresence(roomKey);
+        }
       }
     }
   });
@@ -430,4 +512,4 @@ server.listen(port, () => {
   console.log(`🚀 WebSocket server running on port ${port}`);
 });
 
-export { wss, individualClients, groupClients };
+export { wss, individualClients, groupClients, workspaceClients };

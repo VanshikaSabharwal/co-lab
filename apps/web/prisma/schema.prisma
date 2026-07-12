@@ -38,6 +38,8 @@ model User {
   accounts            Account[]
   sessions            Session[]
 
+  authoredChangeRequests ChangeRequest[] @relation("AuthoredChangeRequests")
+
   // Add timestamps
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -139,10 +141,66 @@ model Group {
   liveUrl           String?
   createdAt         DateTime        @default(now())
 
+  // Cached repo metadata (refreshed on load / sync) — avoids assuming "main"
+  defaultBranch String?
+  headSha       String?
+
   owner        User?           @relation("OwnerGroups", fields: [ownerId], references: [id])
   members      GroupMember[]   @relation("GroupToMembers")
   groupMessage GroupMessage[]  @relation("GroupMessage")
   modifiedFiles ModifiedFiles[] @relation("modifiedFiles")
+  workspaceBoards WorkspaceBoard[] @relation("GroupWorkspaceBoards")
+  changeRequests ChangeRequest[] @relation("GroupChangeRequests")
+}
+
+enum ChangeRequestStatus {
+  OPEN
+  MERGED
+  REJECTED
+  CONFLICT
+}
+
+model ChangeRequest {
+  id         String              @id @default(cuid())
+  groupId    String
+  authorId   String
+  title      String
+  branchName String
+  prNumber   Int?
+  prUrl      String?
+  status     ChangeRequestStatus @default(OPEN)
+  baseSha    String?
+  // Snapshot of the files this CR carried (path + content), for the review UI
+  files      Json?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  group  Group @relation("GroupChangeRequests", fields: [groupId], references: [id])
+  author User  @relation("AuthoredChangeRequests", fields: [authorId], references: [id])
+
+  @@index([groupId])
+  @@index([authorId])
+}
+
+enum WorkspaceBoardType {
+  MIND_MAP
+  PLANNING
+  DB_SCHEMA
+  UI_DESIGN
+}
+
+model WorkspaceBoard {
+  id        String             @id @default(cuid())
+  groupId   String
+  type      WorkspaceBoardType
+  content   Json
+  updatedAt DateTime           @updatedAt
+  createdAt DateTime           @default(now())
+
+  group Group @relation("GroupWorkspaceBoards", fields: [groupId], references: [id])
+
+  @@unique([groupId, type])
+  @@index([groupId])
 }
 
 model GroupMember {
@@ -153,8 +211,22 @@ model GroupMember {
   user    User      @relation("UserGroups", fields: [userId], references: [id])
   role    GroupRole @default(MEMBER)
 
+  // Code-access lifecycle, separate from group membership.
+  // NONE           → not yet a repo collaborator
+  // PENDING_GITHUB → owner wants to invite, but member hasn't linked GitHub yet
+  // INVITED        → GitHub collaborator invitation sent, awaiting acceptance
+  // ACTIVE         → accepted; can push / open change-requests
+  codeAccess CodeAccessStatus @default(NONE)
+
   @@index([groupId])
   @@index([userId])
+}
+
+enum CodeAccessStatus {
+  NONE
+  PENDING_GITHUB
+  INVITED
+  ACTIVE
 }
 
 model Invite {
@@ -203,6 +275,9 @@ model ModifiedFiles {
   userId     String
   groupId    String
   modifiedById String?
+  // Commit sha of the default branch when this draft session started —
+  // the CR branch is cut from here so the author's work sits on what they saw.
+  baseSha    String?
 
   changes     Change[]    @relation("changedFile")
   modifiedBy  User?       @relation("userModifiedFile", fields: [modifiedById], references: [id])

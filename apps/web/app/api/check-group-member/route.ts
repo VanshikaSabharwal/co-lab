@@ -1,12 +1,15 @@
 import prisma from "../../lib/prisma";
+import { getSessionUser, unauthorized } from "../../lib/apiAuth";
 
 export async function GET(req: Request) {
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
+
   // Parse the query parameters
   const { searchParams } = new URL(req.url);
   const group = searchParams.get("group");
-  const userId = searchParams.get("userId");
   // Validate request parameters
-  if (!group || !userId) {
+  if (!group) {
     return new Response(
       JSON.stringify({ error: "Invalid request parameters." }),
       { status: 400 },
@@ -27,9 +30,9 @@ export async function GET(req: Request) {
       });
     }
 
-    // Check if the user is a member of the group
+    // Check if the logged-in user is a member of the group
     const isMember = groupExists.members.some(
-      (member) => member.userId === userId,
+      (member) => member.userId === me.id,
     );
 
     // Return true or false based on membership

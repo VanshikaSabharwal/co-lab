@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
 import { decrypt, extractRepoName } from "../../lib/encryption";
+import { getSessionUser, isGroupMember, unauthorized, forbidden } from "../../lib/apiAuth";
 
 async function fetchRepoFileTree(
   owner: string,
@@ -61,7 +62,14 @@ async function fetchFileContent(
 
 export async function POST(req: Request) {
   try {
+    const me = await getSessionUser();
+    if (!me) return unauthorized();
+
     const { groupId } = await req.json();
+
+    if (groupId && !(await isGroupMember(groupId, me.id))) {
+      return forbidden("Not a member of this group");
+    }
 
     if (!groupId) {
       return NextResponse.json(

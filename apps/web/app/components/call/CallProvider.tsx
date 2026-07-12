@@ -12,6 +12,7 @@ import {
 import { Room } from "livekit-client";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
+import { fetchWsToken } from "../../lib/wsAuth";
 
 type CallType = "AUDIO" | "VIDEO" | "GROUP";
 
@@ -75,10 +76,16 @@ export function CallProvider({ children }: { children: ReactNode }) {
     let reconnectTimer: ReturnType<typeof setTimeout>;
     let closed = false;
 
-    function connect() {
+    async function connect() {
       if (closed) return;
       try {
-        const ws = new WebSocket(`${WS_BASE}/ws?userId=${userId}`);
+        // Tokens are short-lived, so fetch a fresh one on every (re)connect
+        const token = await fetchWsToken();
+        if (!token || closed) {
+          if (!closed) reconnectTimer = setTimeout(connect, 3000);
+          return;
+        }
+        const ws = new WebSocket(`${WS_BASE}/ws?token=${token}`);
         wsRef.current = ws;
 
         ws.onmessage = (event) => {

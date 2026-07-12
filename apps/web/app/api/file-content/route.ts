@@ -1,16 +1,24 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
 import { decrypt, extractRepoName } from "../../lib/encryption";
+import { getSessionUser, isGroupMember, unauthorized, forbidden } from "../../lib/apiAuth";
 
 export async function POST(req: Request) {
   try {
-    const { groupId, filePath } = await req.json();
+    const me = await getSessionUser();
+    if (!me) return unauthorized();
+
+    const { groupId, filePath, ref } = await req.json();
 
     if (!groupId || !filePath) {
       return NextResponse.json(
         { error: "groupId and filePath are required" },
         { status: 400 },
       );
+    }
+
+    if (!(await isGroupMember(groupId, me.id))) {
+      return forbidden("Not a member of this group");
     }
 
     const groupDetails = await prisma.group.findUnique({
@@ -46,7 +54,9 @@ export async function POST(req: Request) {
       decryptedAccessToken = githubAccessToken;
     }
 
-    const url = `https://api.github.com/repos/${ownerName}/${githubRepo}/contents/${filePath}`;
+    const url =
+      `https://api.github.com/repos/${ownerName}/${githubRepo}/contents/${filePath}` +
+      (ref ? `?ref=${encodeURIComponent(ref)}` : "");
     const response = await fetch(url, {
       headers: {
         Authorization: `token ${decryptedAccessToken}`,

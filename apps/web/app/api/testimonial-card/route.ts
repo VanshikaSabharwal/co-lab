@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
+import { getSessionUser, unauthorized } from "../../lib/apiAuth";
 
 export async function GET() {
   try {
@@ -18,7 +19,11 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const { name, description, userId } = await req.json();
+    const me = await getSessionUser();
+    if (!me) return unauthorized();
+    const userId = me.id;
+
+    const { name, description } = await req.json();
     if (!name || !description) {
       return NextResponse.json(
         {

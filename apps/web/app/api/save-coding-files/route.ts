@@ -1,25 +1,30 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
+import { getSessionUser, unauthorized } from "../../lib/apiAuth";
 
 export async function POST(req: Request) {
   try {
-    const { name, path, userId, content, group } = await req.json();
+    const me = await getSessionUser();
+    if (!me) return unauthorized();
+    const userId = me.id;
 
-    if (!name || !path || !content || !group || !userId) {
+    const { name, path, content, group } = await req.json();
+
+    if (!name || !path || !content || !group) {
       return NextResponse.json(
-        { error: "File name, path, content, group, and userId are required" },
+        { error: "File name, path, content, and group are required" },
         { status: 400 },
       );
     }
 
-    const existingFile = await prisma.file.findUnique({
-      where: { id: userId },
+    const existingFile = await prisma.file.findFirst({
+      where: { userId, group, path },
     });
 
     if (existingFile) {
       // Update the existing file and set status to PENDING
       await prisma.file.update({
-        where: { id: userId },
+        where: { id: existingFile.id },
         data: {
           content,
           group,
@@ -59,19 +64,21 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
+  const userId = me.id;
+
   const { searchParams } = new URL(req.url);
-  const userId = searchParams.get("userId");
   const group = searchParams.get("group");
 
-  if (!userId || !group) {
+  if (!group) {
     return NextResponse.json(
-      { error: "Both userId and group are required" },
+      { error: "group is required" },
       { status: 400 },
     );
   }
 
   try {
-    console.log(`Fetching files for userId: ${userId}, group: ${group}`);
 
     const updatedFiles = await prisma.file.findMany({
       where: {
