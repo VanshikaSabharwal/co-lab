@@ -3,6 +3,18 @@ import prisma from "./prisma";
 import { decrypt, extractRepoName } from "./encryption";
 import { getLinkedGithub, getGithubUsername, hasRepoScope } from "./githubLink";
 
+// A stored group GitHub token that GitHub rejected (expired / revoked).
+// GitHub App user tokens expire ~8h by default, so this is the common cause.
+export function isGitHubAuthError(err: any): boolean {
+  const msg = err?.message || "";
+  return (
+    err?.status === 401 ||
+    /bad credentials/i.test(msg) ||
+    /token is invalid or expired/i.test(msg) ||
+    /invalid or expired/i.test(msg)
+  );
+}
+
 export interface RepoContext {
   octokit: Octokit; // authenticated with the OWNER token (always works for repo ops)
   owner: string;

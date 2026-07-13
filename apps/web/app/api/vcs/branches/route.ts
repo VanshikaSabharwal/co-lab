@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "../../../lib/prisma";
 import { getSessionUser, isGroupMember, unauthorized, forbidden } from "../../../lib/apiAuth";
-import { getRepoContext } from "../../../lib/vcs";
+import { getRepoContext, isGitHubAuthError } from "../../../lib/vcs";
 
 // GET — branches for the group repo, for the editor's branch switcher.
 // Default branch is flagged; open CR branches are grouped separately.
@@ -22,6 +22,12 @@ export async function GET(req: Request) {
   try {
     ctx = await getRepoContext(groupId);
   } catch (err: any) {
+    if (isGitHubAuthError(err)) {
+      return NextResponse.json(
+        { error: "GitHub access expired — reconnect GitHub", code: "GITHUB_AUTH_EXPIRED" },
+        { status: 401 },
+      );
+    }
     return NextResponse.json({ error: `Couldn't reach the repo: ${err.message}` }, { status: 502 });
   }
 

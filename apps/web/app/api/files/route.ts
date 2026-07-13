@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
 import { decrypt, extractRepoName } from "../../lib/encryption";
 import { getSessionUser, isGroupMember, unauthorized, forbidden } from "../../lib/apiAuth";
+import { isGitHubAuthError } from "../../lib/vcs";
 
 // Lists the whole repo in ONE call via the git-trees API (recursive), rather
 // than one contents request per directory — much faster on big repos.
@@ -131,6 +132,12 @@ export async function GET(req: Request) {
     return NextResponse.json(allFiles, { status: 200 });
   } catch (err) {
     console.error("Error fetching group or GitHub repo: ", err);
+    if (isGitHubAuthError(err)) {
+      return NextResponse.json(
+        { error: "GitHub access expired — reconnect GitHub", code: "GITHUB_AUTH_EXPIRED" },
+        { status: 401 },
+      );
+    }
     return NextResponse.json(
       {
         error:

@@ -256,6 +256,38 @@ export default function Editor({ github, group }: CodeProps) {
   const [currentBranch, setCurrentBranch] = useState<string>("");
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [branchQuery, setBranchQuery] = useState("");
+  // The group's stored GitHub token expired/was revoked (GitHub App tokens
+  // expire ~8h) — show a reconnect banner.
+  const [authExpired, setAuthExpired] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+
+  const handleReconnectGithub = async () => {
+    setReconnecting(true);
+    try {
+      const res = await fetch("/api/vcs/reconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groupId: group }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("GitHub reconnected");
+        window.location.reload();
+      } else if (data.needsRelink) {
+        // The owner's own GitHub sign-in is also stale — re-authorize, then retry
+        toast("Re-authorizing GitHub…", { icon: "🔑" });
+        window.location.href = "/api/github/link";
+      } else if (res.status === 403) {
+        toast.error("Only the group owner can reconnect GitHub.");
+      } else {
+        toast.error(data.error ?? "Reconnect failed");
+      }
+    } catch {
+      toast.error("Reconnect failed");
+    } finally {
+      setReconnecting(false);
+    }
+  };
 
   // Cache loaded file bodies so switching files/tabs is instant. Keyed by
   // `${branch}:${path}` since content differs per branch.
@@ -340,7 +372,12 @@ export default function Editor({ github, group }: CodeProps) {
               await loadFileContent(firstFile);
             }
           } else {
-            toast.error("Failed to load the files.");
+            const errBody = await filesRes.json().catch(() => ({}));
+            if (errBody.code === "GITHUB_AUTH_EXPIRED") {
+              setAuthExpired(true);
+            } else {
+              toast.error("Failed to load the files.");
+            }
           }
 
           if (urlRes.ok) {
@@ -954,6 +991,23 @@ export default function Editor({ github, group }: CodeProps) {
 
         {/* Code Editor */}
         <div className="flex-1 overflow-hidden flex flex-col">
+          {/* GitHub token expired — offer a one-click reconnect */}
+          {authExpired && (
+            <div className="flex items-center justify-between gap-3 border-b border-red-800/60 bg-red-950/50 px-4 py-2.5 text-xs text-red-200">
+              <span className="flex items-center gap-2">
+                <span>⚠️</span>
+                GitHub access for this repo has expired. Reconnect to load files again.
+              </span>
+              <button
+                onClick={handleReconnectGithub}
+                disabled={reconnecting}
+                className="shrink-0 rounded-md bg-white px-3 py-1 font-medium text-gray-900 hover:bg-gray-100 disabled:opacity-60"
+              >
+                {reconnecting ? "Reconnecting…" : "Reconnect GitHub"}
+              </button>
+            </div>
+          )}
+
           {/* Locked banner when the member hasn't accepted code access */}
           {!loading && codeAccess !== "loading" && !canEdit && (
             <div className="flex items-center gap-2 border-b border-amber-800/60 bg-amber-950/40 px-4 py-2 text-xs text-amber-300">
