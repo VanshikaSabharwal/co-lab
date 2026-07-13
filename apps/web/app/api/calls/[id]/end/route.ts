@@ -13,10 +13,17 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   try {
     const callRoom = await prisma.callRoom.findUnique({
       where: { id: params.id },
+      include: { participants: true },
     });
 
     if (!callRoom) {
       return NextResponse.json({ error: "Call not found" }, { status: 404 });
+    }
+
+    // Only a participant may end the call
+    const isParticipant = callRoom.participants.some((p) => p.userId === session.user.id);
+    if (!isParticipant) {
+      return NextResponse.json({ error: "Not a participant" }, { status: 403 });
     }
 
     await prisma.callRoom.update({

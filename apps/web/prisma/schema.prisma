@@ -39,6 +39,7 @@ model User {
   sessions            Session[]
 
   authoredChangeRequests ChangeRequest[] @relation("AuthoredChangeRequests")
+  bugReports             BugReport[]     @relation("UserBugReports")
 
   // Add timestamps
   createdAt           DateTime        @default(now())
@@ -158,6 +159,51 @@ enum ChangeRequestStatus {
   MERGED
   REJECTED
   CONFLICT
+}
+
+enum BugStatus {
+  OPEN
+  IN_PROGRESS
+  FIXED
+  WONT_FIX
+}
+
+enum BugSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum BugCategory {
+  BUG
+  UI
+  PERFORMANCE
+  OTHER
+}
+
+model BugReport {
+  id             String       @id @default(cuid())
+  reporterId     String
+  title          String
+  description    String       @db.Text
+  category       BugCategory  @default(BUG)
+  severity       BugSeverity  @default(MEDIUM)
+  status         BugStatus    @default(OPEN)
+  // Auto-captured context
+  url            String?
+  userAgent      String?
+  context        Json?
+  screenshot     String?      @db.Text // data URL (v1)
+  // GitHub linkage
+  githubIssueNo  Int?
+  githubIssueUrl String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  reporter User @relation("UserBugReports", fields: [reporterId], references: [id])
+
+  @@index([reporterId])
+  @@index([status])
 }
 
 model ChangeRequest {
