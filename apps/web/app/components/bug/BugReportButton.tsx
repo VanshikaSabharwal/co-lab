@@ -16,6 +16,51 @@ function pushError(msg: string) {
   if (recentErrors.length > 10) recentErrors.shift();
 }
 
+// ── Launcher position persistence ───────────────────────────────────────
+interface Point {
+  x: number;
+  y: number;
+}
+
+const POS_STORAGE_KEY = "ko-lab:bugbtn-pos";
+const VIEWPORT_MARGIN = 8;
+// Below this much movement the gesture is treated as a click, not a drag.
+const DRAG_THRESHOLD_PX = 4;
+
+// Storage access throws in private-mode browsers, so every call is guarded.
+function loadPos(): Point | null {
+  try {
+    const raw = localStorage.getItem(POS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.x === "number" && typeof parsed?.y === "number") return parsed;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function savePos(p: Point) {
+  try {
+    localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(p));
+  } catch {
+    /* ignore */
+  }
+}
+
+// Keep the button fully on screen — it must never strand off-viewport after a
+// drag to the edge or a device rotation.
+function clampToViewport(p: Point, el: HTMLElement | null): Point {
+  const w = el?.offsetWidth ?? 0;
+  const h = el?.offsetHeight ?? 0;
+  const maxX = Math.max(VIEWPORT_MARGIN, window.innerWidth - w - VIEWPORT_MARGIN);
+  const maxY = Math.max(VIEWPORT_MARGIN, window.innerHeight - h - VIEWPORT_MARGIN);
+  return {
+    x: Math.min(Math.max(p.x, VIEWPORT_MARGIN), maxX),
+    y: Math.min(Math.max(p.y, VIEWPORT_MARGIN), maxY),
+  };
+}
+
 export default function BugReportButton() {
   const { status } = useSession();
   const [open, setOpen] = useState(false);
@@ -30,6 +75,29 @@ export default function BugReportButton() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDown = useRef(false);
+
+  // ── Draggable launcher ────────────────────────────────────────────────
+  // `null` means "use the default bottom-right anchor"; once dragged we switch
+  // to explicit left/top coordinates.
+  const [pos, setPos] = useState<Point | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  // Grab offset within the button, plus whether this gesture has moved far
+  // enough to count as a drag rather than a click.
+  const drag = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
+
+  // Restore a saved position after mount so SSR markup matches the client.
+  useEffect(() => {
+    const saved = loadPos();
+    if (saved) setPos(clampToViewport(saved, buttonRef.current));
+  }, []);
+
+  // Keep the button reachable after a resize or device rotation.
+  useEffect(() => {
+    const onResize = () =>
+      setPos((p) => (p ? clampToViewport(p, buttonRef.current) : p));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // Capture global errors from app start (this button is mounted globally).
   useEffect(() => {
@@ -92,6 +160,50 @@ export default function BugReportButton() {
 
   // All hooks are declared above — safe to bail out for signed-out users now.
   if (status !== "authenticated") return null;
+
+  // ── Launcher drag handlers ──────────────────────────────────────────
+  // Pointer events cover mouse and touch with one code path. Because a click
+  // fires after a drag ends, the modal is opened from onPointerUp only when the
+  // gesture never crossed the drag threshold — otherwise repositioning the
+  // button would also open the report form every time.
+  const onLauncherDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    drag.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const onLauncherMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    const next = clampToViewport(
+      { x: e.clientX - d.dx, y: e.clientY - d.dy },
+      e.currentTarget,
+    );
+    if (!d.moved) {
+      // Only start moving once past the threshold, so a slightly shaky click
+      // still registers as a click.
+      const rect = e.currentTarget.getBoundingClientRect();
+      const travelled = Math.hypot(next.x - rect.left, next.y - rect.top);
+      if (travelled < DRAG_THRESHOLD_PX) return;
+      d.moved = true;
+    }
+    setPos(next);
+  };
+
+  const onLauncherUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = drag.current;
+    drag.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    if (!d) return;
+    if (d.moved) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      savePos({ x: rect.left, y: rect.top });
+    } else {
+      setOpen(true);
+    }
+  };
 
   const pointer = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -181,12 +293,22 @@ export default function BugReportButton() {
       {/* Floating button */}
       {!open && (
         <button
-          onClick={() => setOpen(true)}
-          title="Report a bug"
-          className="fixed bottom-5 right-5 z-[90] flex items-center gap-2 rounded-full bg-gray-900 dark:bg-white px-4 py-2.5 text-sm font-medium text-white dark:text-gray-900 shadow-lg transition hover:scale-105"
+          ref={buttonRef}
+          onPointerDown={onLauncherDown}
+          onPointerMove={onLauncherMove}
+          onPointerUp={onLauncherUp}
+          onPointerCancel={onLauncherUp}
+          title="Drag to move · click to report"
+          aria-label="Report a bug"
+          // touch-none stops the page scrolling under a touch-drag.
+          style={pos ? { left: pos.x, top: pos.y } : undefined}
+          className={`fixed z-[90] flex touch-none cursor-grab items-center gap-2 rounded-full bg-gray-900 p-3 text-sm font-medium text-white shadow-lg transition-transform hover:scale-105 active:cursor-grabbing dark:bg-white dark:text-gray-900 sm:px-4 sm:py-2.5 ${
+            pos ? "" : "bottom-5 right-5"
+          }`}
         >
           <Bug className="h-4 w-4" />
-          Report a bug
+          {/* Icon-only on phones so it occludes less of a narrow viewport. */}
+          <span className="hidden sm:inline">Report a bug</span>
         </button>
       )}
 
