@@ -10,13 +10,14 @@ import {
   type EdgeChange,
   type Node,
   type NodeChange,
+  type NodePositionChange,
 } from "@xyflow/react";
 import { useWorkspaceSocket, type WorkspaceBoardType } from "./useWorkspaceSocket";
 
 type GraphBoardOp =
   | { action: "nodes_change"; changes: NodeChange[] }
   | { action: "edges_change"; changes: EdgeChange[] }
-  | { action: "connect"; connection: Connection }
+  | { action: "connect"; connection: Connection | Edge }
   | { action: "node_add"; node: Node }
   | { action: "nodes_add"; nodes: Node[] }
   | { action: "node_update"; id: string; patch: Partial<Node> }
@@ -43,6 +44,8 @@ interface UseWorkspaceBoardOptions {
 }
 
 const SAVE_DEBOUNCE_MS = 1500;
+// Matches the cadence CursorLayer already uses for its own throttled sends.
+const DRAG_BROADCAST_MS = 50;
 
 // Shared load/save/sync logic for the three node-graph workspace boards
 // (mind map, DB schema, UI design). Planning & milestones uses its own
@@ -137,13 +140,64 @@ export function useWorkspaceBoard({ groupId, type, slug, userId, onPeerCursor }:
     };
   }, [nodes, edges, loaded, groupId, slug, userId]);
 
+  // A continuous drag fires ~60 position changes/second. The WS server caps
+  // both message size and messages-per-second and answers with {type:"error"},
+  // which this client ignores — so unthrottled dragging silently drops ops and
+  // desyncs peers. Local state still updates on every change (dragging stays
+  // smooth); only the broadcast is rate-limited.
+  const lastDragSend = useRef(0);
+  const pendingDrag = useRef<Map<string, NodePositionChange>>(new Map());
+  const dragFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushDragOps = useCallback(() => {
+    if (dragFlushTimer.current) {
+      clearTimeout(dragFlushTimer.current);
+      dragFlushTimer.current = null;
+    }
+    if (pendingDrag.current.size === 0) return;
+    const changes = [...pendingDrag.current.values()];
+    pendingDrag.current.clear();
+    lastDragSend.current = Date.now();
+    sendOp({ action: "nodes_change", changes });
+  }, [sendOp]);
+
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
       setNodes((nds) => applyNodeChanges(changes, nds));
-      sendOp({ action: "nodes_change", changes });
+
+      // In-flight drag ticks are coalesced per node id — only the latest
+      // position matters. Everything else (add/remove/select/dimensions, and
+      // the final dragging:false resting position) goes out immediately.
+      const deferred: NodePositionChange[] = [];
+      const immediate: NodeChange[] = [];
+      for (const c of changes) {
+        if (c.type === "position" && c.dragging) deferred.push(c);
+        else immediate.push(c);
+      }
+
+      if (deferred.length) {
+        for (const c of deferred) pendingDrag.current.set(c.id, c);
+        const elapsed = Date.now() - lastDragSend.current;
+        if (elapsed >= DRAG_BROADCAST_MS) {
+          flushDragOps();
+        } else if (!dragFlushTimer.current) {
+          // Trailing flush so the last tick of a drag is never lost.
+          dragFlushTimer.current = setTimeout(flushDragOps, DRAG_BROADCAST_MS - elapsed);
+        }
+      }
+
+      if (immediate.length) {
+        // Order matters: a queued move must land before the drag-end position.
+        flushDragOps();
+        sendOp({ action: "nodes_change", changes: immediate });
+      }
     },
-    [sendOp],
+    [sendOp, flushDragOps],
   );
+
+  useEffect(() => () => {
+    if (dragFlushTimer.current) clearTimeout(dragFlushTimer.current);
+  }, []);
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
@@ -153,8 +207,10 @@ export function useWorkspaceBoard({ groupId, type, slug, userId, onPeerCursor }:
     [sendOp],
   );
 
+  // Accepts a plain Connection, or a Connection enriched with edge fields
+  // (type/label) so boards can stamp their own defaults at creation time.
   const onConnect = useCallback(
-    (connection: Connection) => {
+    (connection: Connection | Edge) => {
       setEdges((eds) => addEdge(connection, eds));
       sendOp({ action: "connect", connection });
     },
