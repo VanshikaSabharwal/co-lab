@@ -24,6 +24,8 @@ export interface PlanningColumn {
   color: string | null;
 }
 
+export type PlanningPriority = "LOW" | "MEDIUM" | "HIGH";
+
 export interface PlanningTask {
   id: string;
   columnId: string;
@@ -33,6 +35,7 @@ export interface PlanningTask {
   startDate: string | null;
   dueDate: string | null;
   color: string | null;
+  priority: PlanningPriority | null;
   milestoneId: string | null;
   assigneeIds: string[];
 }
@@ -81,6 +84,7 @@ const byPosition = <T extends { position: number }>(a: T, b: T) => a.position - 
 export function usePlanningData({ groupId, userId }: { groupId: string; userId?: string }) {
   const [state, setState] = useState<BoardState>(EMPTY);
   const [members, setMembers] = useState<GroupMemberSummary[]>([]);
+  const [groupName, setGroupName] = useState("Workspace");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(0);
 
@@ -120,7 +124,7 @@ export function usePlanningData({ groupId, userId }: { groupId: string; userId?:
     });
   }, []);
 
-  const { isConnected, presence, sendOp } = useWorkspaceSocket({
+  const { isConnected, isOffline, presence, sendOp } = useWorkspaceSocket({
     groupId,
     board: "PLANNING",
     userId,
@@ -156,7 +160,10 @@ export function usePlanningData({ groupId, userId }: { groupId: string; userId?:
             milestones: board.milestones ?? [],
           });
         }
-        if (memberData) setMembers(memberData.members ?? []);
+        if (memberData) {
+          setMembers(memberData.members ?? []);
+          if (memberData.groupName) setGroupName(memberData.groupName);
+        }
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
@@ -355,8 +362,10 @@ export function usePlanningData({ groupId, userId }: { groupId: string; userId?:
     tasksByColumn,
     members,
     membersById,
+    groupName,
     loaded,
     isConnected,
+    isOffline,
     presence,
     /** True while any write is in flight — drives the save-status pill. */
     isSaving: saving > 0,

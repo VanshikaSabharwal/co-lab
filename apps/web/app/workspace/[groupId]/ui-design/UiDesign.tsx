@@ -51,7 +51,7 @@ export default function UiDesign({ groupId }: UiDesignProps) {
     nodes,
     edges,
     presence,
-    isConnected,
+    isOffline,
     onNodesChange,
     onEdgesChange,
     onConnect,
@@ -254,7 +254,7 @@ export default function UiDesign({ groupId }: UiDesignProps) {
       nodeTypes={NODE_TYPES}
       presence={presence}
       currentUserId={userId}
-      isConnected={isConnected}
+      isOffline={isOffline}
       onNodesChange={handleNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}

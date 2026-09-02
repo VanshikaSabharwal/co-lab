@@ -5,6 +5,9 @@ import { fetchWsToken } from "../../lib/wsAuth";
 
 export type WorkspaceBoardType = "MIND_MAP" | "PLANNING" | "DB_SCHEMA" | "UI_DESIGN";
 
+// How long live sync must stay down before the UI says anything.
+const OFFLINE_GRACE_MS = 10_000;
+
 interface UseWorkspaceSocketOptions {
   groupId: string;
   board: WorkspaceBoardType;
@@ -17,9 +20,14 @@ interface UseWorkspaceSocketOptions {
 export function useWorkspaceSocket({ groupId, board, userId, onRemoteOp }: UseWorkspaceSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  // Separate from isConnected: true only once we've been down long enough that
+  // it's worth telling the user. A momentary blip during a normal reconnect
+  // shouldn't flash a warning at them.
+  const [isOffline, setIsOffline] = useState(false);
   const [presence, setPresence] = useState<string[]>([]);
   const reconnectAttempts = useRef(0);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const offlineTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
   const onRemoteOpRef = useRef(onRemoteOp);
   onRemoteOpRef.current = onRemoteOp;
@@ -43,6 +51,11 @@ export function useWorkspaceSocket({ groupId, board, userId, onRemoteOp }: UseWo
 
       ws.onopen = () => {
         setIsConnected(true);
+        setIsOffline(false);
+        if (offlineTimer.current) {
+          clearTimeout(offlineTimer.current);
+          offlineTimer.current = null;
+        }
         reconnectAttempts.current = 0;
         heartbeatRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
@@ -66,6 +79,13 @@ export function useWorkspaceSocket({ groupId, board, userId, onRemoteOp }: UseWo
         wsRef.current = null;
         setIsConnected(false);
         if (!isMountedRef.current) return;
+        // Only surface the outage after the grace period, so a routine
+        // reconnect never flashes a warning.
+        if (!offlineTimer.current) {
+          offlineTimer.current = setTimeout(() => {
+            if (isMountedRef.current) setIsOffline(true);
+          }, OFFLINE_GRACE_MS);
+        }
         const delay = Math.min(1000 * 2 ** reconnectAttempts.current, 30_000);
         reconnectAttempts.current += 1;
         setTimeout(connect, delay);
@@ -79,6 +99,7 @@ export function useWorkspaceSocket({ groupId, board, userId, onRemoteOp }: UseWo
     return () => {
       isMountedRef.current = false;
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      if (offlineTimer.current) clearTimeout(offlineTimer.current);
       wsRef.current?.close();
       wsRef.current = null;
       setIsConnected(false);
@@ -95,5 +116,5 @@ export function useWorkspaceSocket({ groupId, board, userId, onRemoteOp }: UseWo
     [groupId, board],
   );
 
-  return { isConnected, presence, sendOp };
+  return { isConnected, isOffline, presence, sendOp };
 }

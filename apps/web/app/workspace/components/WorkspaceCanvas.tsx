@@ -3,7 +3,7 @@
 import React, { useRef, useState } from "react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { ArrowLeft, PanelLeft, PanelRight, X } from "lucide-react";
+import { ArrowLeft, PanelLeft, PanelRight, WifiOff, X } from "lucide-react";
 import {
   Background,
   ConnectionMode,
@@ -35,7 +35,12 @@ interface WorkspaceCanvasProps {
   edgeTypes?: EdgeTypes;
   presence: string[];
   currentUserId?: string;
-  isConnected: boolean;
+  /**
+   * True only after live sync has been down past the grace period — a routine
+   * reconnect shouldn't warn the user. Work still saves over HTTP; only live
+   * collaboration is affected.
+   */
+  isOffline?: boolean;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
@@ -202,7 +207,7 @@ export default function WorkspaceCanvas({
   edgeTypes,
   presence,
   currentUserId,
-  isConnected,
+  isOffline,
   onNodesChange,
   onEdgesChange,
   onConnect,
@@ -248,9 +253,13 @@ export default function WorkspaceCanvas({
           <h1 className="min-w-0 truncate text-sm font-semibold text-gray-900 dark:text-white">
             {title}
           </h1>
-          {!isConnected && (
-            <span className="shrink-0 rounded bg-amber-100 px-2 py-0.5 text-[11px] text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
-              Reconnecting…
+          {isOffline && (
+            <span
+              title="Live sync is offline — your changes are still saved, but you won't see teammates' edits until it reconnects."
+              className="inline-flex shrink-0 items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500"
+            >
+              <WifiOff size={11} />
+              Offline
             </span>
           )}
         </div>

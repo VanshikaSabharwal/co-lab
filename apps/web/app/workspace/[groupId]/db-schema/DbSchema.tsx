@@ -26,7 +26,7 @@ export default function DbSchema({ groupId }: DbSchemaProps) {
     nodes,
     edges,
     presence,
-    isConnected,
+    isOffline,
     onNodesChange,
     onEdgesChange,
     onConnect,
@@ -128,7 +128,7 @@ export default function DbSchema({ groupId }: DbSchemaProps) {
       edgeTypes={EDGE_TYPES}
       presence={presence}
       currentUserId={userId}
-      isConnected={isConnected}
+      isOffline={isOffline}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={handleConnect}

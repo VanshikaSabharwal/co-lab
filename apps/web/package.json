@@ -12,9 +12,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:seed": "npx tsx prisma/seed-call.ts"
+    "test:seed": "npx tsx prisma/seed-call.ts",
+    "localstack:up": "docker-compose -f ../../docker-compose.localstack.yml up -d"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1094.0",
     "@codemirror/lang-cpp": "^6.0.3",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",

@@ -39,6 +39,8 @@ export default function ProfilePage() {
   const [github, setGithub] = useState<GithubStatus | null>(null);
   const [invitations, setInvitations] = useState<RepoInvitation[]>([]);
   const [acceptingId, setAcceptingId] = useState<number | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const loadGithub = async () => {
     try {
@@ -125,6 +127,34 @@ export default function ProfilePage() {
       });
   }, [status]);
 
+  const handleAvatarUpload = async (file: File) => {
+    const objectUrl = URL.createObjectURL(file);
+    setAvatarPreview(objectUrl);
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/profile/avatar", {
+        method: "POST",
+        body: formData,
+      });
+      if (res.ok) {
+        const { image } = await res.json();
+        toast.success("Avatar updated");
+        setProfile((p) => (p ? { ...p, image } : p));
+      } else {
+        const d = await res.json();
+        toast.error(d.error ?? "Failed to upload avatar");
+      }
+    } catch {
+      toast.error("Failed to upload avatar");
+    } finally {
+      setUploadingAvatar(false);
+      URL.revokeObjectURL(objectUrl);
+      setAvatarPreview(null);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -178,19 +208,36 @@ export default function ProfilePage() {
 
         {/* Avatar + name */}
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm p-6 flex items-center gap-4">
-          {profile!.image ? (
-            <Image
-              src={profile!.image}
-              alt="Avatar"
-              width={64}
-              height={64}
-              className="rounded-full object-cover"
-            />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-              <User className="w-8 h-8 text-gray-400" />
+          <label className="relative cursor-pointer group shrink-0">
+            {avatarPreview || profile!.image ? (
+              <Image
+                src={avatarPreview ?? profile!.image!}
+                alt="Avatar"
+                width={64}
+                height={64}
+                unoptimized={!!avatarPreview}
+                className={`w-16 h-16 rounded-full object-cover ${uploadingAvatar ? "opacity-50" : ""}`}
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                <User className="w-8 h-8 text-gray-400" />
+              </div>
+            )}
+            <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-medium">
+              {uploadingAvatar ? "…" : "Edit"}
             </div>
-          )}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              disabled={uploadingAvatar}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleAvatarUpload(file);
+                e.target.value = "";
+              }}
+            />
+          </label>
           <div>
             <p className="font-semibold text-gray-900 dark:text-white text-lg">
               {profile!.name ?? "No name set"}

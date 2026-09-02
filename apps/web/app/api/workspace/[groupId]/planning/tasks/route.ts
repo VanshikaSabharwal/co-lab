@@ -9,6 +9,7 @@ import {
   isoDate,
   nextTaskPosition,
   notFound,
+  priorityEnum,
   requireGroupAccess,
   serializeTask,
   toDate,
@@ -24,6 +25,7 @@ const createTask = z.object({
   startDate: isoDate.optional(),
   dueDate: isoDate.optional(),
   color: z.string().max(32).optional(),
+  priority: priorityEnum.optional(),
   milestoneId: z.string().optional(),
   assigneeIds: z.array(z.string()).max(20).optional(),
 });
@@ -62,6 +64,7 @@ export async function POST(req: Request, { params }: { params: { groupId: string
       startDate: body.startDate ? toDate(body.startDate) : null,
       dueDate: body.dueDate ? toDate(body.dueDate) : null,
       color: body.color ?? null,
+      priority: body.priority ?? null,
       milestoneId: body.milestoneId ?? null,
       assignees: { create: assigneeIds.map((userId) => ({ userId })) },
     },

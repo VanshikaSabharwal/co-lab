@@ -9,6 +9,7 @@ import {
   filterToGroupMembers,
   isoDate,
   notFound,
+  priorityEnum,
   requireGroupAccess,
   serializeTask,
   toDate,
@@ -26,6 +27,7 @@ const patchTask = z
     startDate: isoDate.nullable().optional(),
     dueDate: isoDate.nullable().optional(),
     color: z.string().max(32).nullable().optional(),
+    priority: priorityEnum.nullable().optional(),
     milestoneId: z.string().nullable().optional(),
     assigneeIds: z.array(z.string()).max(20).optional(),
   })
@@ -93,6 +95,7 @@ export async function PATCH(req: Request, { params }: Params) {
           dueDate: body.dueDate ? toDate(body.dueDate) : null,
         }),
         ...(body.color !== undefined && { color: body.color }),
+        ...(body.priority !== undefined && { priority: body.priority }),
         ...(body.milestoneId !== undefined && { milestoneId: body.milestoneId }),
       },
       select: TASK_SELECT,

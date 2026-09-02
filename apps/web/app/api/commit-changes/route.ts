@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Octokit } from "@octokit/rest";
 import prisma from "../../lib/prisma";
 import { decrypt } from "../../lib/encryption";
-import { getSessionUser, unauthorized } from "../../lib/apiAuth";
+import { getSessionUser, unauthorized, requireCodeAccess } from "../../lib/apiAuth";
 
 export async function GET() {
   return NextResponse.json(
@@ -26,6 +26,11 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // This route commits with the OWNER's token, so GitHub's own permission
+    // check never fires for the caller — code access must be enforced here.
+    const gate = await requireCodeAccess(groupId, userId);
+    if (!gate.ok) return gate.res;
 
     // Fetch group details and access token
     const groupDetails = await prisma.modifiedFiles.findFirst({

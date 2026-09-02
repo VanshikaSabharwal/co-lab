@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import prisma from "../../../lib/prisma";
 import { getSessionUser, unauthorized, forbidden } from "../../../lib/apiAuth";
-import { sendCollaboratorInvite, refreshCollaboratorStatus } from "../../../lib/githubCollaborator";
+import {
+  sendCollaboratorInvite,
+  refreshCollaboratorStatus,
+  revokeCollaborator,
+} from "../../../lib/githubCollaborator";
 
 // POST — owner invites a group member to become a repo collaborator.
 // Body: { groupId, memberUserId }
@@ -45,6 +49,40 @@ export async function POST(req: Request) {
   return NextResponse.json({ codeAccess: result.status });
 }
 
+// DELETE — owner revokes a member's repo access (removes the collaborator,
+// cancels any pending invite, clears codeAccess).
+// Body: { groupId, memberUserId }
+export async function DELETE(req: Request) {
+  const me = await getSessionUser();
+  if (!me) return unauthorized();
+
+  const { groupId, memberUserId } = await req.json();
+  if (!groupId || !memberUserId) {
+    return NextResponse.json({ error: "groupId and memberUserId are required" }, { status: 400 });
+  }
+
+  const group = await prisma.group.findUnique({
+    where: { id: groupId },
+    select: { ownerId: true },
+  });
+  if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
+  if (group.ownerId !== me.id) {
+    return forbidden("Only the group owner can revoke collaborators");
+  }
+  // The owner's access comes from holding the repo token, not from a
+  // GroupMember row — revoking it here would be a no-op that reads as success.
+  if (memberUserId === group.ownerId) {
+    return NextResponse.json({ error: "The group owner's access cannot be revoked" }, { status: 400 });
+  }
+
+  const result = await revokeCollaborator(groupId, memberUserId);
+  if (!result.ok) {
+    return NextResponse.json({ error: result.message }, { status: 502 });
+  }
+
+  return NextResponse.json({ revoked: true, codeAccess: "NONE" });
+}
+
 // GET — code-access status for every member of a group (owner view) or for
 // the current user in a group. Reconciles against live GitHub state.
 // Query: ?groupId=...  (optional &self=1)
@@ -80,7 +118,9 @@ export async function GET(req: Request) {
     });
     if (!membership) return forbidden("Not a member of this group");
 
-    if (membership.codeAccess === "INVITED") {
+    // Re-verify ACTIVE too, not just INVITED: an ACTIVE row is exactly the
+    // stale-privilege case (removed on GitHub, still ACTIVE here).
+    if (membership.codeAccess === "INVITED" || membership.codeAccess === "ACTIVE") {
       await refreshCollaboratorStatus(groupId, me.id);
     }
     const fresh = await prisma.groupMember.findFirst({

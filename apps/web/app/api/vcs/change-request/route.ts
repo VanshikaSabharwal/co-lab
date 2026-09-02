@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "../../../lib/prisma";
-import { getSessionUser, unauthorized, forbidden } from "../../../lib/apiAuth";
+import { getSessionUser, unauthorized, forbidden, requireCodeAccess } from "../../../lib/apiAuth";
 import { getRepoContext, openChangeRequestBranch, resolveAuthor } from "../../../lib/vcs";
 import { checkChangeRequestLimit } from "../../../lib/vcsLimits";
 
@@ -16,18 +16,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "groupId and title are required" }, { status: 400 });
   }
 
-  // Must be a member with active code access (editing is gated on this too)
-  const membership = await prisma.groupMember.findFirst({
-    where: { groupId, userId: me.id },
-    select: { codeAccess: true },
-  });
+  // Must be the owner or a member with active code access
+  const gate = await requireCodeAccess(groupId, me.id);
+  if (!gate.ok) return gate.res;
+
   const group = await prisma.group.findUnique({ where: { id: groupId }, select: { ownerId: true } });
   if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
-
-  const isOwner = group.ownerId === me.id;
-  if (!isOwner && (!membership || membership.codeAccess !== "ACTIVE")) {
-    return forbidden("You need accepted code access to raise a change request");
-  }
 
   // Free-tier limits
   const limit = await checkChangeRequestLimit(groupId, me.id);

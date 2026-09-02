@@ -98,7 +98,7 @@ export function useWorkspaceBoard({ groupId, type, slug, userId, onPeerCursor }:
     }
   }, []);
 
-  const { isConnected, presence, sendOp } = useWorkspaceSocket({
+  const { isConnected, isOffline, presence, sendOp } = useWorkspaceSocket({
     groupId,
     board: type,
     userId,
@@ -281,6 +281,7 @@ export function useWorkspaceBoard({ groupId, type, slug, userId, onPeerCursor }:
     loaded,
     updatedAt,
     isConnected,
+    isOffline,
     presence,
     onNodesChange,
     onEdgesChange,

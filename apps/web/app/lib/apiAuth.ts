@@ -40,3 +40,39 @@ export async function isGroupMember(groupId: string, userId: string) {
   if (!group) return false;
   return group.ownerId === userId || group.members.some((m) => m.userId === userId);
 }
+
+/**
+ * Server-side code-access gate: the group owner, or a member whose codeAccess
+ * is ACTIVE. Call this in every route that writes to the repo or acts with the
+ * owner's token on a member's behalf.
+ *
+ * The Editor's `canEdit` is a UI affordance only — a direct fetch bypasses it —
+ * and GitHub's own 403 protects nothing on paths that use the owner token.
+ *
+ *   const gate = await requireCodeAccess(groupId, me.id);
+ *   if (!gate.ok) return gate.res;
+ */
+export async function requireCodeAccess(
+  groupId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; res: NextResponse }> {
+  const group = await prisma.group.findUnique({
+    where: { id: groupId },
+    select: { ownerId: true },
+  });
+  if (!group) {
+    return { ok: false, res: NextResponse.json({ error: "Group not found" }, { status: 404 }) };
+  }
+  // The owner holds the repo token, so they always have code access.
+  if (group.ownerId === userId) return { ok: true };
+
+  const membership = await prisma.groupMember.findFirst({
+    where: { groupId, userId },
+    select: { codeAccess: true },
+  });
+  if (!membership) return { ok: false, res: forbidden("Not a member of this group") };
+  if (membership.codeAccess !== "ACTIVE") {
+    return { ok: false, res: forbidden("You need accepted code access for this action") };
+  }
+  return { ok: true };
+}

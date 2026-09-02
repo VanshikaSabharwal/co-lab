@@ -80,6 +80,83 @@ async function setCodeAccess(
   });
 }
 
+/**
+ * Removes a member's push access to the group repo and clears their codeAccess.
+ *
+ * Cancels any still-pending invitation as well — without that, a revoked member
+ * can accept a stale invite email and walk straight back in. The DB is cleared
+ * even when GitHub reports the user was never a collaborator (404), so local
+ * state can never be more permissive than GitHub's.
+ */
+export async function revokeCollaborator(
+  groupId: string,
+  memberUserId: string,
+): Promise<{ ok: boolean; message?: string }> {
+  const group = await prisma.group.findUnique({
+    where: { id: groupId },
+    select: { githubRepo: true, ownerName: true, githubAccessToken: true },
+  });
+  if (!group) return { ok: false, message: "Group not found" };
+
+  const username = await getGithubUsername(memberUserId);
+  if (!username) {
+    // Never had a linked identity, so no GitHub grant can exist. Clear locally.
+    await setCodeAccess(groupId, memberUserId, "NONE");
+    return { ok: true };
+  }
+
+  let ownerToken: string;
+  try {
+    ownerToken = decrypt(group.githubAccessToken);
+  } catch {
+    ownerToken = group.githubAccessToken;
+  }
+  const repo = extractRepoName(group.githubRepo);
+  const headers = {
+    Authorization: `token ${ownerToken}`,
+    Accept: "application/vnd.github.v3+json",
+  };
+
+  const res = await fetch(
+    `https://api.github.com/repos/${group.ownerName}/${repo}/collaborators/${username}`,
+    { method: "DELETE", headers },
+  );
+
+  // 204 = removed; 404 = wasn't a collaborator. Both leave them without access.
+  if (res.status !== 204 && res.status !== 404) {
+    const body = await res.json().catch(() => ({}));
+    return { ok: false, message: body.message || `GitHub returned ${res.status}` };
+  }
+
+  // Cancel a pending invitation, which survives collaborator removal.
+  try {
+    const invRes = await fetch(
+      `https://api.github.com/repos/${group.ownerName}/${repo}/invitations`,
+      { headers },
+    );
+    if (invRes.ok) {
+      const invites = await invRes.json();
+      const mine = (Array.isArray(invites) ? invites : []).filter(
+        (i: any) => i?.invitee?.login?.toLowerCase() === username.toLowerCase(),
+      );
+      await Promise.all(
+        mine.map((i: any) =>
+          fetch(
+            `https://api.github.com/repos/${group.ownerName}/${repo}/invitations/${i.id}`,
+            { method: "DELETE", headers },
+          ),
+        ),
+      );
+    }
+  } catch {
+    // Best-effort: the collaborator grant is already gone, which is the
+    // access-bearing half. A leftover invite is caught by the next reconcile.
+  }
+
+  await setCodeAccess(groupId, memberUserId, "NONE");
+  return { ok: true };
+}
+
 /** Is this member currently a collaborator on the group repo? (204/404 probe.) */
 export async function refreshCollaboratorStatus(
   groupId: string,
@@ -111,6 +188,14 @@ export async function refreshCollaboratorStatus(
   if (res.status === 204) {
     await setCodeAccess(groupId, memberUserId, "ACTIVE");
     return true;
+  }
+
+  // 404 = definitively not a collaborator (removed on GitHub, or invite
+  // revoked). Downgrade, otherwise stale ACTIVE rows keep push rights forever.
+  // Only 404 is conclusive: on 5xx or rate-limiting we leave state untouched
+  // rather than locking out the whole group during a GitHub outage.
+  if (res.status === 404) {
+    await setCodeAccess(groupId, memberUserId, "NONE");
   }
   return false;
 }

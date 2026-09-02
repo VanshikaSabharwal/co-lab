@@ -6,15 +6,25 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import { Sun, Moon, Github, User } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+// Routes that render their own full-height chrome (sidebar + top bar) and would
+// otherwise sit below this global bar, showing two logos and two theme toggles.
+const OWN_CHROME = ["/workspace"];
 
 const Header = () => {
   const { data: session, status } = useSession();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  if (pathname && OWN_CHROME.some((prefix) => pathname.startsWith(prefix))) {
+    return null;
+  }
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-950/80 backdrop-blur-md shadow-sm">

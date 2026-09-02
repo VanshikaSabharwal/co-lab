@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
-import { getSessionUser, unauthorized } from "../../lib/apiAuth";
+import { getSessionUser, unauthorized, requireCodeAccess } from "../../lib/apiAuth";
 
 export async function POST(req: Request) {
   const me = await getSessionUser();
@@ -14,6 +14,12 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  // Drafts are the input to a change request branch, so saving one requires the
+  // same code access as submitting. Without this, any signed-in user could
+  // write drafts into a group they have no access to.
+  const gate = await requireCodeAccess(group, me.id);
+  if (!gate.ok) return gate.res;
 
   try {
     const modifiedFile = await prisma.modifiedFiles.upsert({

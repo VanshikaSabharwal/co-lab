@@ -42,8 +42,9 @@ const securityHeaders = [
       // unsafe-eval needed for Next.js dev HMR (remove in production if possible)
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
-      // Allow images from self, data URIs, and any HTTPS source (GitHub avatars etc.)
-      "img-src 'self' data: https:",
+      // Allow images from self, data URIs, and any HTTPS source (GitHub avatars etc.).
+      // LocalStack serves over plain HTTP in dev, so it needs an explicit allowance.
+      `img-src 'self' data: https:${process.env.NODE_ENV !== "production" ? " http://localhost:4566" : ""}`,
       "font-src 'self'",
       // Allow connections to your own API + WebSocket server + GitHub API
       `connect-src 'self' ${allowedOrigins.join(" ")} ws://localhost:8080 wss: ws://localhost:7880 https://api.github.com`,
@@ -92,6 +93,8 @@ const nextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
+      // LocalStack S3 endpoint, used for locally-uploaded profile avatars in dev.
+      { protocol: "http", hostname: "localhost", port: "4566" },
     ],
   },
 };

@@ -275,6 +275,12 @@ model PlanningColumn {
   @@index([groupId, position])
 }
 
+enum PlanningPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 model PlanningTask {
   id          String    @id @default(cuid())
   // Denormalized from the column so the whole board loads in one query.
@@ -283,6 +289,9 @@ model PlanningTask {
   title       String
   description String?
   position    Int
+  // Optional: a task without a stated priority is neither urgent nor trivial,
+  // which is different from explicitly choosing MEDIUM.
+  priority    PlanningPriority?
   // Timeline bar span. Null means the task isn't scheduled and draws no bar.
   startDate   DateTime?
   dueDate     DateTime?

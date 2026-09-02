@@ -23,7 +23,7 @@ export default function MindMap({ groupId }: MindMapProps) {
     nodes,
     edges,
     presence,
-    isConnected,
+    isOffline,
     onNodesChange,
     onEdgesChange,
     onConnect,
@@ -62,7 +62,7 @@ export default function MindMap({ groupId }: MindMapProps) {
       nodeTypes={NODE_TYPES}
       presence={presence}
       currentUserId={userId}
-      isConnected={isConnected}
+      isOffline={isOffline}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { encrypt } from "../../lib/encryption";
 import { getSessionUser, isGroupMember, unauthorized, forbidden } from "../../lib/apiAuth";
+import { revokeCollaborator } from "../../lib/githubCollaborator";
 
 const prisma = new PrismaClient();
 
@@ -265,6 +266,22 @@ export async function DELETE(req: Request) {
         { status: 403 },
       );
     }
+
+    // Revoke repo access BEFORE the rows go away — once groupMember is deleted
+    // there is no record of who to revoke, and their GitHub push rights would
+    // outlive the group with nothing in the UI to reveal it. Best-effort: a
+    // GitHub failure must not block the owner from deleting their own group.
+    const membersToRevoke = await prisma.groupMember.findMany({
+      where: { groupId, codeAccess: { in: ["INVITED", "ACTIVE"] } },
+      select: { userId: true },
+    });
+    await Promise.all(
+      membersToRevoke.map((m) =>
+        revokeCollaborator(groupId, m.userId).catch((err) =>
+          console.error(`Failed to revoke ${m.userId} on group delete:`, err),
+        ),
+      ),
+    );
 
     await prisma.$transaction(async (tx) => {
       await tx.change.deleteMany({

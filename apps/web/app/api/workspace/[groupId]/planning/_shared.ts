@@ -11,6 +11,8 @@ import { getSessionUser, isGroupMember, unauthorized, forbidden } from "../../..
 
 export const POSITION_STEP = 1000;
 
+export const priorityEnum = z.enum(["LOW", "MEDIUM", "HIGH"]);
+
 /** Dates cross the wire as YYYY-MM-DD; the DB stores DateTime. */
 export const isoDate = z
   .string()
@@ -127,6 +129,7 @@ export interface SerializedTask {
   startDate: string | null;
   dueDate: string | null;
   color: string | null;
+  priority: "LOW" | "MEDIUM" | "HIGH" | null;
   milestoneId: string | null;
   assigneeIds: string[];
 }
@@ -140,6 +143,7 @@ type TaskRow = {
   startDate: Date | null;
   dueDate: Date | null;
   color: string | null;
+  priority: "LOW" | "MEDIUM" | "HIGH" | null;
   milestoneId: string | null;
   assignees?: { userId: string }[];
 };
@@ -154,6 +158,7 @@ export function serializeTask(task: TaskRow): SerializedTask {
     startDate: toISO(task.startDate),
     dueDate: toISO(task.dueDate),
     color: task.color,
+    priority: task.priority,
     milestoneId: task.milestoneId,
     assigneeIds: (task.assignees ?? []).map((a) => a.userId),
   };
@@ -193,6 +198,7 @@ export const TASK_SELECT = {
   startDate: true,
   dueDate: true,
   color: true,
+  priority: true,
   milestoneId: true,
   assignees: { select: { userId: true } },
 } as const;

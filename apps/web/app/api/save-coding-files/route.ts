@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
-import { getSessionUser, unauthorized } from "../../lib/apiAuth";
+import { getSessionUser, unauthorized, requireCodeAccess } from "../../lib/apiAuth";
 
 export async function POST(req: Request) {
   try {
@@ -16,6 +16,10 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+
+    // Group-scoped file writes need the same code access as any other edit.
+    const gate = await requireCodeAccess(group, userId);
+    if (!gate.ok) return gate.res;
 
     const existingFile = await prisma.file.findFirst({
       where: { userId, group, path },

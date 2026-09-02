@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx next *)",
+      "Bash(npm test *)",
+      "Bash(python3 -)",
+      "Bash(npx vitest *)",
+      "Bash(node -e ' *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(npx prisma *)",
+      "Bash(timeout 15 npx prisma migrate status)",
+      "Bash(npx tsx *)",
+      "Bash(git rm *)",
+      "Bash(npm run *)",
+      "Bash(cd /home/vanshika/personalProjects/ko-lab-work/ko-lab/apps/web && ls pages 2>/dev/null; echo \"--- pages dir exists above? ---\"; ls -d ../../pages 2>/dev/null; echo \"--- 404/500/error pages in app ---\"; ls app/not-found* app/error* app/global-error* 2>/dev/null; echo \"--- tailwind content globs reference pages ---\"; grep -n \"pages\" tailwind.config.js)",
+      "Read(//home/vanshika/personalProjects/**)"
+    ]
+  }
+}
