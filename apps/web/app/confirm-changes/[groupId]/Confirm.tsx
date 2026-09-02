@@ -315,7 +315,7 @@ const Confirm = ({ group }: GroupProps) => {
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Describe your change (becomes the PR title)…"
-                    className="flex-1 rounded p-2 text-black"
+                    className="flex-1 rounded border border-gray-300 bg-white p-2 text-gray-900 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500"
                   />
                   <button
                     onClick={submitChangeRequest}

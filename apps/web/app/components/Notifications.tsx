@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -34,7 +36,7 @@ const Notifications = () => {
     <div className="relative flex items-center space-x-4">
       <Link
         href="/notifications"
-        className="text-black hover:text-blue-600 font-semibold text-lg transition-colors duration-200 hover:scale-105"
+        className="text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 font-semibold text-lg transition-colors duration-200 hover:scale-105"
         onClick={handleViewNotifications} 
       >
         Notifications
