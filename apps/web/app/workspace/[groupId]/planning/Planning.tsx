@@ -23,35 +23,37 @@ export default function Planning({ groupId }: PlanningProps) {
   const { content, presence, isConnected, updateContent } = usePlanningBoard({ groupId, userId });
 
   return (
-    <div className="flex h-screen flex-col bg-gray-900 text-white">
-      <div className="flex items-center justify-between border-b border-gray-700/50 bg-gray-800/80 px-4 py-2.5">
-        <div className="flex items-center gap-3">
+    <div className="flex h-[100dvh] flex-col bg-white text-gray-900 dark:bg-gray-900 dark:text-white">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 border-b border-gray-200 bg-gray-50/80 px-3 py-2.5 dark:border-gray-700/50 dark:bg-gray-800/80 sm:px-4">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <Link
             href={`/workspace/${groupId}`}
-            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white"
+            className="flex shrink-0 items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
           >
             <ArrowLeft size={16} />
-            Workspace
+            <span className="hidden sm:inline">Workspace</span>
           </Link>
-          <span className="text-gray-600">/</span>
-          <h1 className="text-sm font-semibold text-white">Planning & Milestones</h1>
+          <span className="hidden text-gray-400 dark:text-gray-600 sm:inline">/</span>
+          <h1 className="min-w-0 truncate text-sm font-semibold text-gray-900 dark:text-white">
+            Planning & Milestones
+          </h1>
           {!isConnected && (
-            <span className="rounded bg-amber-900/50 px-2 py-0.5 text-[11px] text-amber-300">
+            <span className="shrink-0 rounded bg-amber-100 px-2 py-0.5 text-[11px] text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
               Reconnecting…
             </span>
           )}
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex rounded-md border border-gray-700 bg-gray-900 p-0.5 text-xs">
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="flex rounded-md border border-gray-300 bg-white p-0.5 text-xs dark:border-gray-700 dark:bg-gray-900">
             <button
               onClick={() => setView("board")}
-              className={`rounded px-3 py-1 ${view === "board" ? "bg-blue-600 text-white" : "text-gray-400"}`}
+              className={`rounded px-3 py-1 ${view === "board" ? "bg-blue-600 text-white" : "text-gray-500 dark:text-gray-400"}`}
             >
               Board
             </button>
             <button
               onClick={() => setView("timeline")}
-              className={`rounded px-3 py-1 ${view === "timeline" ? "bg-blue-600 text-white" : "text-gray-400"}`}
+              className={`rounded px-3 py-1 ${view === "timeline" ? "bg-blue-600 text-white" : "text-gray-500 dark:text-gray-400"}`}
             >
               Timeline
             </button>

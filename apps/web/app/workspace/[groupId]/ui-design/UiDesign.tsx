@@ -261,7 +261,10 @@ export default function UiDesign({ groupId }: UiDesignProps) {
       onSelectionChange={onSelectionChange}
       snapToGrid={snap}
       snapGrid={[8, 8]}
-      sidebar={<UiPalette />}
+      // Render prop so the palette gets an insert-at-centre callback for taps —
+      // HTML5 drag events never fire on touch, which left this board unusable
+      // on mobile.
+      renderSidebar={(insertAtCenter) => <UiPalette onPick={insertAtCenter} />}
       rightPanel={
         <PropertiesPanel
           node={selectedNode}

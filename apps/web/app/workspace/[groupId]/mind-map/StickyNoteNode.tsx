@@ -37,7 +37,7 @@ export default function StickyNoteNode({ data }: NodeProps) {
           <button
             key={c}
             onClick={() => d.onColorChange(c)}
-            className={`h-4 w-4 rounded-full border ${COLOR_CLASSES[c]} ${c === d.color ? "ring-2 ring-gray-700" : ""}`}
+            className={`h-4 w-4 rounded-full border ${COLOR_CLASSES[c]} ${c === d.color ? "ring-2 ring-gray-500 dark:ring-gray-800" : ""}`}
             aria-label={`Set color ${c}`}
           />
         ))}

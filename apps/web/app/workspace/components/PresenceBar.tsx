@@ -29,7 +29,7 @@ export default function PresenceBar({ userIds, currentUserId }: PresenceBarProps
         <div
           key={id}
           title={id === currentUserId ? "You" : id}
-          className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-gray-900 text-[10px] font-semibold text-white ${colorFor(id)}`}
+          className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[10px] dark:border-gray-900 font-semibold text-white ${colorFor(id)}`}
         >
           {id.slice(0, 2).toUpperCase()}
         </div>

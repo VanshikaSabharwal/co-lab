@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { getNodesBounds, getViewportForBounds, useReactFlow } from "@xyflow/react";
+import { useTheme } from "next-themes";
 import { toPng } from "html-to-image";
 import { Undo2, Redo2, Magnet, ImageDown } from "lucide-react";
 import toast from "react-hot-toast";
@@ -16,7 +17,7 @@ interface BoardToolbarProps {
 }
 
 const btnCls =
-  "flex items-center gap-1.5 rounded-md border border-gray-700 bg-gray-800/90 px-2.5 py-1.5 text-xs text-gray-300 hover:border-blue-600/60 hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
+  "flex items-center gap-1.5 rounded-md border border-gray-300 bg-white/90 px-2.5 py-1.5 text-xs text-gray-700 hover:border-blue-500/60 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:bg-gray-800/90 dark:text-gray-300 dark:hover:border-blue-600/60 dark:hover:text-white";
 
 export default function BoardToolbar({
   canUndo,
@@ -27,6 +28,7 @@ export default function BoardToolbar({
   onToggleSnap,
 }: BoardToolbarProps) {
   const { getNodes } = useReactFlow();
+  const { resolvedTheme } = useTheme();
   const [exporting, setExporting] = useState(false);
 
   const exportPng = async () => {
@@ -46,7 +48,7 @@ export default function BoardToolbar({
       const vp = getViewportForBounds(bounds, width, height, 0.2, 2, 0.05);
 
       const dataUrl = await toPng(viewport, {
-        backgroundColor: "#111827",
+        backgroundColor: resolvedTheme === "light" ? "#ffffff" : "#111827",
         width,
         height,
         style: {
@@ -69,22 +71,23 @@ export default function BoardToolbar({
   };
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       <button className={btnCls} onClick={onUndo} disabled={!canUndo} title="Undo (structural changes)">
-        <Undo2 size={13} /> Undo
+        <Undo2 size={13} /> <span className="hidden sm:inline">Undo</span>
       </button>
       <button className={btnCls} onClick={onRedo} disabled={!canRedo} title="Redo">
-        <Redo2 size={13} /> Redo
+        <Redo2 size={13} /> <span className="hidden sm:inline">Redo</span>
       </button>
       <button
         className={`${btnCls} ${snap ? "border-blue-600/60 text-blue-300" : ""}`}
         onClick={onToggleSnap}
         title="Snap to grid"
       >
-        <Magnet size={13} /> Snap {snap ? "on" : "off"}
+        <Magnet size={13} /> <span className="hidden sm:inline">Snap {snap ? "on" : "off"}</span>
       </button>
       <button className={btnCls} onClick={exportPng} disabled={exporting} title="Export board as PNG">
-        <ImageDown size={13} /> {exporting ? "Exporting…" : "Export PNG"}
+        <ImageDown size={13} />
+        <span className="hidden sm:inline">{exporting ? "Exporting…" : "Export PNG"}</span>
       </button>
     </div>
   );

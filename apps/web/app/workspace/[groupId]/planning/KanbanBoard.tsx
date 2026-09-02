@@ -1,6 +1,14 @@
 "use client";
 
-import { DndContext, PointerSensor, closestCorners, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  closestCorners,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { Plus } from "lucide-react";
 import { v4 as uuid } from "uuid";
@@ -13,7 +21,13 @@ interface KanbanBoardProps {
 }
 
 export default function KanbanBoard({ content, updateContent }: KanbanBoardProps) {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    // The delay is what lets a vertical swipe scroll the board instead of
+    // starting a drag — without it, touch scrolling and dragging are
+    // indistinguishable.
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -107,7 +121,7 @@ export default function KanbanBoard({ content, updateContent }: KanbanBoardProps
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-      <div className="flex h-full gap-3 overflow-x-auto p-4">
+      <div className="flex h-full snap-x snap-mandatory gap-3 overflow-x-auto p-3 sm:p-4">
         {content.columns.map((column) => (
           <KanbanColumn
             key={column.id}
@@ -122,7 +136,7 @@ export default function KanbanBoard({ content, updateContent }: KanbanBoardProps
         ))}
         <button
           onClick={addColumn}
-          className="flex h-10 w-40 shrink-0 items-center justify-center gap-1 rounded-md border border-dashed border-gray-700 text-xs text-gray-500 hover:border-blue-600/60 hover:text-white"
+          className="flex h-10 w-40 shrink-0 snap-start items-center justify-center gap-1 rounded-md border border-dashed border-gray-300 text-xs text-gray-500 hover:border-blue-500/60 hover:text-gray-900 dark:border-gray-700 dark:hover:border-blue-600/60 dark:hover:text-white"
         >
           <Plus size={14} /> Add column
         </button>
