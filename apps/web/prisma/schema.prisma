@@ -9,24 +9,24 @@ datasource db {
 
 // === USER MODEL ===
 model User {
-  id                  String          @id @default(cuid())
-  email               String          @unique // Changed from optional to required
-  name                String?
-  image               String?
-  emailVerified       DateTime?
+  id            String    @id @default(cuid())
+  email         String    @unique // Changed from optional to required
+  name          String?
+  image         String?
+  emailVerified DateTime?
 
   // Custom fields
   phone               String?         @unique
   password            String?
   chats               Chat[]          @relation("ChatParticipants")
-  sentMessages        Messages[]       @relation("SenderMessages")
-  receivedMessages    Messages[]       @relation("RecipientMessages")
+  sentMessages        Messages[]      @relation("SenderMessages")
+  receivedMessages    Messages[]      @relation("RecipientMessages")
   sentFriendships     Friendship[]    @relation("FriendshipSender")
   receivedFriendships Friendship[]    @relation("FriendshipReceiver")
   ownedGroups         Group[]         @relation("OwnerGroups")
   groupMembers        GroupMember[]   @relation("UserGroups")
   groupMessages       GroupMessage[]  @relation("GroupMessages")
-  userModifiedFiles   ModifiedFiles[]    @relation("userModifiedFile")
+  userModifiedFiles   ModifiedFiles[] @relation("userModifiedFile")
 
   // Call relations
   initiatedCalls      CallRoom[]         @relation("CallInitiator")
@@ -35,31 +35,32 @@ model User {
   pushSubscriptions   PushSubscription[]
 
   // NextAuth relations
-  accounts            Account[]
-  sessions            Session[]
+  accounts Account[]
+  sessions Session[]
 
-  authoredChangeRequests ChangeRequest[] @relation("AuthoredChangeRequests")
-  bugReports             BugReport[]     @relation("UserBugReports")
+  authoredChangeRequests ChangeRequest[]    @relation("AuthoredChangeRequests")
+  bugReports             BugReport[]        @relation("UserBugReports")
+  planningAssignments    PlanningAssignee[] @relation("UserPlanningAssignments")
 
   // Add timestamps
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // === NEXTAUTH MODELS ===
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String? @db.Text
-  access_token       String? @db.Text
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String? @db.Text
-  session_state      String?
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -91,8 +92,8 @@ model Friendship {
   status     String   @default("pending")
   createdAt  DateTime @default(now())
 
-  sender     User     @relation("FriendshipSender", fields: [senderId], references: [id])
-  receiver   User     @relation("FriendshipReceiver", fields: [receiverId], references: [id])
+  sender   User @relation("FriendshipSender", fields: [senderId], references: [id])
+  receiver User @relation("FriendshipReceiver", fields: [receiverId], references: [id])
 }
 
 model Chat {
@@ -132,7 +133,7 @@ model Otp {
 }
 
 model Group {
-  id                String          @id @default(cuid())
+  id                String   @id @default(cuid())
   groupName         String
   githubRepo        String
   ownerName         String
@@ -140,18 +141,22 @@ model Group {
   sshKey            String?
   ownerId           String
   liveUrl           String?
-  createdAt         DateTime        @default(now())
+  createdAt         DateTime @default(now())
 
   // Cached repo metadata (refreshed on load / sync) — avoids assuming "main"
   defaultBranch String?
   headSha       String?
 
-  owner        User?           @relation("OwnerGroups", fields: [ownerId], references: [id])
-  members      GroupMember[]   @relation("GroupToMembers")
-  groupMessage GroupMessage[]  @relation("GroupMessage")
-  modifiedFiles ModifiedFiles[] @relation("modifiedFiles")
+  owner           User?            @relation("OwnerGroups", fields: [ownerId], references: [id])
+  members         GroupMember[]    @relation("GroupToMembers")
+  groupMessage    GroupMessage[]   @relation("GroupMessage")
+  modifiedFiles   ModifiedFiles[]  @relation("modifiedFiles")
   workspaceBoards WorkspaceBoard[] @relation("GroupWorkspaceBoards")
-  changeRequests ChangeRequest[] @relation("GroupChangeRequests")
+  changeRequests  ChangeRequest[]  @relation("GroupChangeRequests")
+
+  planningColumns    PlanningColumn[]    @relation("GroupPlanningColumns")
+  planningTasks      PlanningTask[]      @relation("GroupPlanningTasks")
+  planningMilestones PlanningMilestone[] @relation("GroupPlanningMilestones")
 }
 
 enum ChangeRequestStatus {
@@ -182,23 +187,23 @@ enum BugCategory {
 }
 
 model BugReport {
-  id             String       @id @default(cuid())
+  id             String      @id @default(cuid())
   reporterId     String
   title          String
-  description    String       @db.Text
-  category       BugCategory  @default(BUG)
-  severity       BugSeverity  @default(MEDIUM)
-  status         BugStatus    @default(OPEN)
+  description    String      @db.Text
+  category       BugCategory @default(BUG)
+  severity       BugSeverity @default(MEDIUM)
+  status         BugStatus   @default(OPEN)
   // Auto-captured context
   url            String?
   userAgent      String?
   context        Json?
-  screenshot     String?      @db.Text // data URL (v1)
+  screenshot     String?     @db.Text // data URL (v1)
   // GitHub linkage
   githubIssueNo  Int?
   githubIssueUrl String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   reporter User @relation("UserBugReports", fields: [reporterId], references: [id])
 
@@ -249,6 +254,79 @@ model WorkspaceBoard {
   @@index([groupId])
 }
 
+// === PLANNING & MILESTONES ===
+// The planning board outgrew WorkspaceBoard.content (a JSON blob): cards need
+// assignees, dates and per-column counts, none of which are queryable inside
+// JSON — and the whole blob had to cross the 8KB WebSocket frame limit on every
+// edit. The other three board types still use WorkspaceBoard.
+
+model PlanningColumn {
+  id        String   @id @default(cuid())
+  groupId   String
+  title     String
+  // Gapped integers, so reordering one column doesn't rewrite its siblings.
+  position  Int
+  color     String?
+  createdAt DateTime @default(now())
+
+  group Group          @relation("GroupPlanningColumns", fields: [groupId], references: [id])
+  tasks PlanningTask[]
+
+  @@index([groupId, position])
+}
+
+model PlanningTask {
+  id          String    @id @default(cuid())
+  // Denormalized from the column so the whole board loads in one query.
+  groupId     String
+  columnId    String
+  title       String
+  description String?
+  position    Int
+  // Timeline bar span. Null means the task isn't scheduled and draws no bar.
+  startDate   DateTime?
+  dueDate     DateTime?
+  color       String?
+  milestoneId String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  group     Group              @relation("GroupPlanningTasks", fields: [groupId], references: [id])
+  column    PlanningColumn     @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  milestone PlanningMilestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  assignees PlanningAssignee[]
+
+  @@index([groupId])
+  @@index([columnId, position])
+  @@index([milestoneId])
+}
+
+model PlanningAssignee {
+  taskId String
+  userId String
+
+  task PlanningTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User         @relation("UserPlanningAssignments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
+}
+
+model PlanningMilestone {
+  id        String    @id @default(cuid())
+  groupId   String
+  title     String
+  startDate DateTime?
+  dueDate   DateTime
+  done      Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  group Group          @relation("GroupPlanningMilestones", fields: [groupId], references: [id])
+  tasks PlanningTask[]
+
+  @@index([groupId])
+}
+
 model GroupMember {
   id      String    @id @default(cuid())
   groupId String
@@ -293,56 +371,56 @@ model GroupMessage {
   message    String
   createdAt  DateTime @default(now())
 
-  user   User  @relation("GroupMessages", fields: [senderId], references: [id])
-  group  Group @relation("GroupMessage", fields: [groupId], references: [id])
+  user  User  @relation("GroupMessages", fields: [senderId], references: [id])
+  group Group @relation("GroupMessage", fields: [groupId], references: [id])
 }
 
 model File {
   id        Int        @id @default(autoincrement())
   name      String
   userId    String
-  path      String   
-  content   String   
-  ownerId   String   @default("")
-  ownerName String   @default("") 
-  updatedAt DateTime @updatedAt
+  path      String
+  content   String
+  ownerId   String     @default("")
+  ownerName String     @default("")
+  updatedAt DateTime   @updatedAt
   group     String
-  status    FileStatus @default(PENDING) 
+  status    FileStatus @default(PENDING)
 
   // optional relation if needed
   // user User @relation(fields: [userId], references: [id])
 }
 
 model ModifiedFiles {
-  id         Int          @id @default(autoincrement())
-  name       String
-  path       String
-  content    String       @db.Text
-  userId     String
-  groupId    String
+  id           Int     @id @default(autoincrement())
+  name         String
+  path         String
+  content      String  @db.Text
+  userId       String
+  groupId      String
   modifiedById String?
   // Commit sha of the default branch when this draft session started —
   // the CR branch is cut from here so the author's work sits on what they saw.
-  baseSha    String?
+  baseSha      String?
 
-  changes     Change[]    @relation("changedFile")
-  modifiedBy  User?       @relation("userModifiedFile", fields: [modifiedById], references: [id])
-  group       Group       @relation("modifiedFiles", fields: [groupId], references: [id])
+  changes    Change[] @relation("changedFile")
+  modifiedBy User?    @relation("userModifiedFile", fields: [modifiedById], references: [id])
+  group      Group    @relation("modifiedFiles", fields: [groupId], references: [id])
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, groupId, path], name: "userId_groupId_path")
 }
 
 model Change {
-  id        Int           @id @default(autoincrement())
-  fileId    Int
-  file      ModifiedFiles  @relation("changedFile", fields: [fileId], references: [id])
-  type      String
+  id         Int           @id @default(autoincrement())
+  fileId     Int
+  file       ModifiedFiles @relation("changedFile", fields: [fileId], references: [id])
+  type       String
   lineNumber Int
-  content   String
-  createdAt DateTime      @default(now())
+  content    String
+  createdAt  DateTime      @default(now())
 }
 
 model Notifications {
@@ -364,7 +442,7 @@ model RejectedCr {
   groupName String
   userId    String
   userName  String
-  createdAt DateTime  @default(now())
+  createdAt DateTime @default(now())
 }
 
 model ApprovedCr {
@@ -374,7 +452,7 @@ model ApprovedCr {
   groupId   String
   groupName String
   userName  String
-  createdAt DateTime  @default(now())
+  createdAt DateTime @default(now())
 }
 
 model GuestUser {
@@ -386,12 +464,12 @@ model GuestUser {
 }
 
 model GuestGroup {
-  id      String    @id @default(cuid())
+  id      String @id @default(cuid())
   groupId String
   ownerId String
   userId  String
 
-  user    GuestUser @relation("UserToGuestGroups", fields: [userId], references: [id]) 
+  user GuestUser @relation("UserToGuestGroups", fields: [userId], references: [id])
 
   @@index([userId])
 }
@@ -400,7 +478,7 @@ model Testimonial {
   id          String   @id @default(cuid())
   name        String
   description String
-  userId      String? @unique
+  userId      String?  @unique
   createdAt   DateTime @default(now())
 }
 
@@ -421,18 +499,18 @@ enum CallType {
 }
 
 model CallRoom {
-  id              String             @id @default(cuid())
-  livekitRoom     String             @unique
-  type            CallType
-  status          CallStatus         @default(RINGING)
-  groupId         String?
-  initiatorId     String
-  startedAt       DateTime           @default(now())
-  endedAt         DateTime?
+  id          String     @id @default(cuid())
+  livekitRoom String     @unique
+  type        CallType
+  status      CallStatus @default(RINGING)
+  groupId     String?
+  initiatorId String
+  startedAt   DateTime   @default(now())
+  endedAt     DateTime?
 
-  participants   CallParticipant[]
-  recordings     CallRecording[]
-  initiator      User               @relation("CallInitiator", fields: [initiatorId], references: [id])
+  participants CallParticipant[]
+  recordings   CallRecording[]
+  initiator    User              @relation("CallInitiator", fields: [initiatorId], references: [id])
 
   @@index([status])
   @@index([groupId])
@@ -440,17 +518,17 @@ model CallRoom {
 }
 
 model CallParticipant {
-  id              String     @id @default(cuid())
+  id              String    @id @default(cuid())
   callId          String
   userId          String
   joinedAt        DateTime?
   leftAt          DateTime?
-  isScreenSharing Boolean    @default(false)
-  isMuted         Boolean    @default(false)
-  isVideoOff      Boolean    @default(false)
+  isScreenSharing Boolean   @default(false)
+  isMuted         Boolean   @default(false)
+  isVideoOff      Boolean   @default(false)
 
-  call            CallRoom   @relation(fields: [callId], references: [id], onDelete: Cascade)
-  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  call CallRoom @relation(fields: [callId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([callId, userId])
   @@index([userId])
@@ -463,19 +541,19 @@ enum RecordingStatus {
 }
 
 model CallRecording {
-  id              String          @id @default(cuid())
-  callId          String
-  startedAt       DateTime        @default(now())
-  endedAt         DateTime?
-  filePath        String?
-  fileSize        Int?
-  durationMs      Int?
-  resolution      String          @default("1080p")
-  status          RecordingStatus @default(RECORDING)
-  initiatedById   String
+  id            String          @id @default(cuid())
+  callId        String
+  startedAt     DateTime        @default(now())
+  endedAt       DateTime?
+  filePath      String?
+  fileSize      Int?
+  durationMs    Int?
+  resolution    String          @default("1080p")
+  status        RecordingStatus @default(RECORDING)
+  initiatedById String
 
-  call            CallRoom        @relation(fields: [callId], references: [id], onDelete: Cascade)
-  initiatedBy     User            @relation("RecordingInitiator", fields: [initiatedById], references: [id])
+  call        CallRoom @relation(fields: [callId], references: [id], onDelete: Cascade)
+  initiatedBy User     @relation("RecordingInitiator", fields: [initiatedById], references: [id])
 
   @@index([callId])
 }
@@ -488,7 +566,7 @@ model PushSubscription {
   auth      String
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, endpoint])
 }
