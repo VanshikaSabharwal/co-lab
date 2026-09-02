@@ -256,11 +256,16 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
-  const userId = verifyWsToken(token);
-  if (!userId) {
+  const claims = verifyWsToken(token);
+  if (!claims) {
     ws.close(1008, "Invalid or expired auth token");
     return;
   }
+
+  const userId = claims.sub;
+  // Groups this token is allowed to join rooms for. The claim is signed by the
+  // Next.js app, which is the only side with a database.
+  const allowedGroups = new Set(claims.grp);
 
   // ── Basic userId validation (alphanumeric + hyphens only) ──────────────
   if (!/^[a-zA-Z0-9_-]{1,64}$/.test(userId)) {
@@ -276,15 +281,26 @@ wss.on("connection", (ws, req) => {
   if (!individualClients.has(userId)) individualClients.set(userId, new Set());
   individualClients.get(userId)!.add(ws);
 
-  if (groupId && /^[a-zA-Z0-9_-]{1,64}$/.test(groupId)) {
-    if (!groupClients.has(groupId)) {
-      groupClients.set(groupId, new Map());
-    }
-    groupClients.get(groupId)!.set(userId, ws);
+  // Membership is authorized from the signed claim — a well-formed groupId is
+  // not enough. Without this, any authenticated user could join any group's
+  // room and receive its live traffic.
+  const mayJoinGroup =
+    !!groupId && /^[a-zA-Z0-9_-]{1,64}$/.test(groupId) && allowedGroups.has(groupId);
+
+  if (groupId && !mayJoinGroup) {
+    ws.close(1008, "Not a member of this group");
+    return;
   }
 
-  if (groupId && board && /^[a-zA-Z0-9_-]{1,64}$/.test(groupId) && WORKSPACE_BOARD_TYPES.has(board)) {
-    const roomKey = workspaceRoomKey(groupId, board);
+  if (mayJoinGroup) {
+    if (!groupClients.has(groupId!)) {
+      groupClients.set(groupId!, new Map());
+    }
+    groupClients.get(groupId!)!.set(userId, ws);
+  }
+
+  if (mayJoinGroup && board && WORKSPACE_BOARD_TYPES.has(board)) {
+    const roomKey = workspaceRoomKey(groupId!, board);
     if (!workspaceClients.has(roomKey)) {
       workspaceClients.set(roomKey, new Map());
     }
@@ -350,6 +366,12 @@ wss.on("connection", (ws, req) => {
       // ── Group context registration ────────────────────────────────────
       if (parsedMessage.type === "join_group" && parsedMessage.groupId) {
         const gId = parsedMessage.groupId;
+        // Same membership check as the handshake — otherwise this message
+        // would be a second door into any group's room.
+        if (!allowedGroups.has(gId)) {
+          ws.send(JSON.stringify({ type: "error", message: "Not a member of this group" }));
+          return;
+        }
         if (!groupClients.has(gId)) {
           groupClients.set(gId, new Map());
         }
@@ -373,7 +395,13 @@ wss.on("connection", (ws, req) => {
         const roomKey = workspaceRoomKey(parsedMessage.groupId, parsedMessage.board);
         const members = workspaceClients.get(roomKey);
         if (members?.has(userId)) {
-          const outbound = JSON.stringify({ type: "workspace_op", op: parsedMessage.op });
+          // userId lets receivers attribute a remote op to its author; without
+          // it the richer planning board can't show who changed what.
+          const outbound = JSON.stringify({
+            type: "workspace_op",
+            op: parsedMessage.op,
+            userId,
+          });
           for (const [memberId, memberWs] of members) {
             if (memberId !== userId && memberWs.readyState === WebSocket.OPEN) {
               memberWs.send(outbound);

@@ -12,7 +12,18 @@ if (!SECRET) {
   );
 }
 
-export function verifyWsToken(token: string): string | null {
+export interface WsTokenClaims {
+  /** User id. */
+  sub: string;
+  /**
+   * Group ids the user belongs to, signed in by the Next.js app. This server
+   * has no database, so workspace room admission is authorized from this
+   * claim — see the room-join check in index.ts.
+   */
+  grp: string[];
+}
+
+export function verifyWsToken(token: string): WsTokenClaims | null {
   if (!SECRET) return null;
   const [payload, sig] = token.split(".");
   if (!payload || !sig) return null;
@@ -25,7 +36,10 @@ export function verifyWsToken(token: string): string | null {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString());
     if (typeof data.sub !== "string" || typeof data.exp !== "number") return null;
     if (data.exp < Math.floor(Date.now() / 1000)) return null;
-    return data.sub;
+    // A token minted before the grp claim existed carries no group rights:
+    // it authenticates, but fails closed at room admission.
+    const grp = Array.isArray(data.grp) ? data.grp.filter((g: unknown) => typeof g === "string") : [];
+    return { sub: data.sub, grp };
   } catch {
     return null;
   }
