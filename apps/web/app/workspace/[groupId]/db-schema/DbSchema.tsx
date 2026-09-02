@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { Plus } from "lucide-react";
 import { v4 as uuid } from "uuid";
-import type { EdgeTypes, NodeTypes } from "@xyflow/react";
+import type { Connection, EdgeTypes, NodeTypes } from "@xyflow/react";
 import { useWorkspaceBoard } from "../../lib/useWorkspaceBoard";
 import WorkspaceCanvas from "../../components/WorkspaceCanvas";
 import TableNode, { type ColumnDef } from "./TableNode";
 import RelationEdge from "./RelationEdge";
+import { CARDINALITIES, inferCardinality } from "./cardinality";
 
 interface DbSchemaProps {
   groupId: string;
@@ -16,7 +17,6 @@ interface DbSchemaProps {
 
 const NODE_TYPES: NodeTypes = { table: TableNode };
 const EDGE_TYPES: EdgeTypes = { relation: RelationEdge };
-const CARDINALITIES = ["1-1", "1-many", "many-many"];
 
 export default function DbSchema({ groupId }: DbSchemaProps) {
   const { data: session } = useSession();
@@ -41,6 +41,9 @@ export default function DbSchema({ groupId }: DbSchemaProps) {
         const columns = (n.data?.columns as ColumnDef[]) ?? [];
         return {
           ...n,
+          // Backfill for tables persisted before the drag handle existed —
+          // without this they'd stay unmovable after the fix.
+          dragHandle: n.dragHandle ?? ".table-drag-handle",
           data: {
             ...n.data,
             onRenameTable: (tableName: string) => updateNodeData(n.id, { tableName }),
@@ -62,18 +65,32 @@ export default function DbSchema({ groupId }: DbSchemaProps) {
 
   const displayEdges = useMemo(
     () =>
-      edges.map((e) => ({
-        ...e,
-        type: "relation",
-        data: {
-          onCycleLabel: (edgeId: string) => {
-            const current = edges.find((edge) => edge.id === edgeId);
-            const idx = CARDINALITIES.indexOf((current?.label as string) || "1-1");
-            updateEdgeLabel(edgeId, CARDINALITIES[(idx + 1) % CARDINALITIES.length]!);
+      edges.map((e) => {
+        // The label is derived from the connected columns' keys, so toggling a
+        // primary key re-labels every attached relation. A label the user set
+        // by hand is kept as an explicit override.
+        const inferred = inferCardinality(e, nodes);
+        const isOverridden = typeof e.label === "string" && e.label !== "";
+        return {
+          ...e,
+          type: "relation",
+          label: isOverridden ? e.label : inferred,
+          data: {
+            isOverridden,
+            onCycleLabel: (edgeId: string) => {
+              const current = edges.find((edge) => edge.id === edgeId);
+              const shown = (current?.label as string) || inferred;
+              const idx = CARDINALITIES.indexOf(shown as (typeof CARDINALITIES)[number]);
+              // Cycling past the end clears the override and hands the edge
+              // back to inference.
+              const next = idx === CARDINALITIES.length - 1 ? "" : CARDINALITIES[idx + 1]!;
+              updateEdgeLabel(edgeId, next);
+            },
+            onResetLabel: (edgeId: string) => updateEdgeLabel(edgeId, ""),
           },
-        },
-      })),
-    [edges, updateEdgeLabel],
+        };
+      }),
+    [edges, nodes, updateEdgeLabel],
   );
 
   const handleAddTable = () => {
@@ -81,12 +98,25 @@ export default function DbSchema({ groupId }: DbSchemaProps) {
       id: uuid(),
       type: "table",
       position: { x: 80 + Math.random() * 300, y: 80 + Math.random() * 200 },
+      // Restricts dragging to the header grip. Without this the node's nodrag
+      // inputs cover its whole surface and it cannot be moved at all.
+      dragHandle: ".table-drag-handle",
       data: {
         tableName: "new_table",
         columns: [{ id: uuid(), name: "id", type: "string", isPrimaryKey: true }],
       },
     });
   };
+
+  // Stamp the relation type at creation time — otherwise a freshly drawn edge
+  // renders with the default edge type until the board is reloaded. No label is
+  // set: an empty label means "infer from the connected columns".
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      onConnect({ ...connection, type: "relation", label: "" });
+    },
+    [onConnect],
+  );
 
   return (
     <WorkspaceCanvas
@@ -101,7 +131,7 @@ export default function DbSchema({ groupId }: DbSchemaProps) {
       isConnected={isConnected}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
+      onConnect={handleConnect}
       toolbar={
         <button
           onClick={handleAddTable}

@@ -1,15 +1,18 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { useTheme } from "next-themes";
+import { ArrowLeft, PanelLeft, PanelRight, X } from "lucide-react";
 import {
   Background,
+  ConnectionMode,
   Controls,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  type ColorMode,
   type Connection,
   type Edge,
   type EdgeChange,
@@ -21,6 +24,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import PresenceBar from "./PresenceBar";
+import { useCoarsePointer } from "../lib/useCoarsePointer";
 
 interface WorkspaceCanvasProps {
   groupId: string;
@@ -47,6 +51,55 @@ interface WorkspaceCanvasProps {
   // Called with the dropped item's drag payload and its position translated
   // into flow coordinates — used by the UI/UX design palette.
   onDropItem?: (payload: string, position: { x: number; y: number }) => void;
+  /**
+   * Renders the left panel. Given `insertAtCenter`, which drops a palette
+   * payload at the middle of the current viewport — the tap-to-insert path for
+   * touch, where HTML5 drag events never fire. Passed as a render prop because
+   * translating to flow coordinates requires being inside ReactFlowProvider.
+   */
+  renderSidebar?: (insertAtCenter: (payload: string) => void) => React.ReactNode;
+}
+
+// Small dismiss affordance shown only while a panel is acting as a mobile
+// drawer — tapping the backdrop also works, but this is more discoverable.
+function DrawerClose({ onClick, side }: { onClick: () => void; side: "left" | "right" }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Close panel"
+      className={`absolute top-2 z-10 rounded-full bg-gray-200 p-1.5 text-gray-600 dark:bg-gray-700 dark:text-gray-300 md:hidden ${
+        side === "left" ? "right-2" : "left-2"
+      }`}
+    >
+      <X size={14} />
+    </button>
+  );
+}
+
+// Supplies the sidebar with an insert-at-viewport-centre callback. Lives inside
+// ReactFlowProvider so it can translate screen to flow coordinates; the boards
+// themselves render outside the provider and cannot.
+function SidebarSlot({
+  render,
+  onDropItem,
+  onInserted,
+}: {
+  render: (insertAtCenter: (payload: string) => void) => React.ReactNode;
+  onDropItem?: WorkspaceCanvasProps["onDropItem"];
+  onInserted: () => void;
+}) {
+  const { screenToFlowPosition } = useReactFlow();
+  const insertAtCenter = (payload: string) => {
+    if (!onDropItem) return;
+    const pane = document.querySelector(".react-flow");
+    const rect = pane?.getBoundingClientRect();
+    const center = rect
+      ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+      : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    onDropItem(payload, screenToFlowPosition(center));
+    onInserted();
+  };
+  return <>{render(insertAtCenter)}</>;
 }
 
 function CanvasArea({
@@ -81,6 +134,10 @@ function CanvasArea({
 >) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
+  const isCoarsePointer = useCoarsePointer();
+  const { resolvedTheme } = useTheme();
+  // React Flow restyles its Background/Controls/MiniMap from this.
+  const colorMode: ColorMode = resolvedTheme === "light" ? "light" : "dark";
 
   return (
     <div
@@ -99,7 +156,13 @@ function CanvasArea({
         onDropItem(payload, position);
       }}
     >
-      {toolbar && <div className="absolute left-3 top-3 z-10">{toolbar}</div>}
+      {/* On phones the toolbar moves to the bottom so it clears the drawer
+          toggles in the header, and wraps rather than overflowing. */}
+      {toolbar && (
+        <div className="absolute bottom-3 left-3 right-3 z-10 flex flex-wrap gap-2 md:bottom-auto md:right-auto md:top-3">
+          {toolbar}
+        </div>
+      )}
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -111,12 +174,19 @@ function CanvasArea({
         onSelectionChange={onSelectionChange}
         snapToGrid={snapToGrid}
         snapGrid={snapGrid}
-        colorMode="dark"
+        // Loose mode lets either end of a connection start or receive the drag,
+        // which is far more forgiving — especially with a finger.
+        connectionMode={ConnectionMode.Loose}
+        connectionRadius={isCoarsePointer ? 44 : 30}
+        colorMode={colorMode}
+        zoomOnPinch
+        panOnScroll
         fitView
       >
         <Background />
-        <Controls />
-        <MiniMap pannable zoomable />
+        <Controls className="!bottom-16 md:!bottom-4" />
+        {/* The minimap would eat a quarter of a phone screen. */}
+        <MiniMap pannable zoomable className="!hidden md:!block" />
         {overlay}
       </ReactFlow>
     </div>
@@ -144,32 +214,94 @@ export default function WorkspaceCanvas({
   snapGrid,
   onSelectionChange,
   onDropItem,
+  renderSidebar,
 }: WorkspaceCanvasProps) {
+  // Which side panel is open as an overlay on small screens. At md: and up both
+  // panels are always inline and this is ignored.
+  const [panel, setPanel] = useState<"none" | "left" | "right">("none");
+  const hasSidebar = Boolean(sidebar || renderSidebar);
+
   return (
-    <div className="flex h-screen flex-col bg-gray-900 text-white">
-      <div className="flex items-center justify-between border-b border-gray-700/50 bg-gray-800/80 px-4 py-2.5">
-        <div className="flex items-center gap-3">
+    // 100dvh, not h-screen: vh is measured against the largest viewport, so the
+    // canvas would sit clipped behind mobile browser chrome.
+    <div className="flex h-[100dvh] flex-col bg-white text-gray-900 dark:bg-gray-900 dark:text-white">
+      <div className="flex flex-wrap items-center justify-between gap-y-1.5 border-b border-gray-200 bg-gray-50/80 px-3 py-2.5 dark:border-gray-700/50 dark:bg-gray-800/80 sm:px-4">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+          {/* Mobile-only panel toggles, rendered only when a panel exists. */}
+          {hasSidebar && (
+            <button
+              onClick={() => setPanel((p) => (p === "left" ? "none" : "left"))}
+              aria-label="Toggle palette"
+              className="rounded p-1.5 text-gray-500 hover:bg-gray-200 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white md:hidden"
+            >
+              <PanelLeft size={16} />
+            </button>
+          )}
           <Link
             href={`/workspace/${groupId}`}
-            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white"
+            className="flex shrink-0 items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
           >
             <ArrowLeft size={16} />
-            Workspace
+            <span className="hidden sm:inline">Workspace</span>
           </Link>
-          <span className="text-gray-600">/</span>
-          <h1 className="text-sm font-semibold text-white">{title}</h1>
+          <span className="hidden text-gray-400 dark:text-gray-600 sm:inline">/</span>
+          <h1 className="min-w-0 truncate text-sm font-semibold text-gray-900 dark:text-white">
+            {title}
+          </h1>
           {!isConnected && (
-            <span className="rounded bg-amber-900/50 px-2 py-0.5 text-[11px] text-amber-300">
+            <span className="shrink-0 rounded bg-amber-100 px-2 py-0.5 text-[11px] text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
               Reconnecting…
             </span>
           )}
         </div>
-        <PresenceBar userIds={presence} currentUserId={currentUserId} />
+        <div className="flex shrink-0 items-center gap-1">
+          <PresenceBar userIds={presence} currentUserId={currentUserId} />
+          {rightPanel && (
+            <button
+              onClick={() => setPanel((p) => (p === "right" ? "none" : "right"))}
+              aria-label="Toggle properties"
+              className="rounded p-1.5 text-gray-500 hover:bg-gray-200 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white md:hidden"
+            >
+              <PanelRight size={16} />
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="relative flex flex-1 overflow-hidden">
         <ReactFlowProvider>
-          {sidebar}
+          {/* Backdrop for the mobile drawers. */}
+          {panel !== "none" && (
+            <div
+              onClick={() => setPanel("none")}
+              className="absolute inset-0 z-20 bg-black/40 md:hidden"
+              aria-hidden
+            />
+          )}
+
+          {/* Below md: these are slide-over drawers. At md: and up the
+              transform/position resets make them ordinary flex siblings, so the
+              desktop layout is unchanged. */}
+          {hasSidebar && (
+            <div
+              className={`absolute inset-y-0 left-0 z-30 flex md:relative md:z-auto md:!translate-x-0 ${
+                panel === "left" ? "translate-x-0" : "-translate-x-full"
+              } transition-transform duration-200 md:transition-none`}
+            >
+              {renderSidebar ? (
+                <SidebarSlot
+                  render={renderSidebar}
+                  onDropItem={onDropItem}
+                  // Close the drawer after a tap-insert so the result is visible.
+                  onInserted={() => setPanel("none")}
+                />
+              ) : (
+                sidebar
+              )}
+              <DrawerClose onClick={() => setPanel("none")} side="left" />
+            </div>
+          )}
+
           <CanvasArea
             nodes={nodes}
             edges={edges}
@@ -185,7 +317,17 @@ export default function WorkspaceCanvas({
             onSelectionChange={onSelectionChange}
             onDropItem={onDropItem}
           />
-          {rightPanel}
+
+          {rightPanel && (
+            <div
+              className={`absolute inset-y-0 right-0 z-30 flex md:relative md:z-auto md:!translate-x-0 ${
+                panel === "right" ? "translate-x-0" : "translate-x-full"
+              } transition-transform duration-200 md:transition-none`}
+            >
+              <DrawerClose onClick={() => setPanel("none")} side="right" />
+              {rightPanel}
+            </div>
+          )}
         </ReactFlowProvider>
       </div>
     </div>
