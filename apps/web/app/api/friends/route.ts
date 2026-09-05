@@ -3,6 +3,10 @@ import prisma from "../../lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../lib/auth";
 
+// Reads the session/headers, so it is per-request. Without this Next tries
+// to prerender it at build time and logs a dynamic-server-usage error.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {

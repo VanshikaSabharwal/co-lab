@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import prisma from "../../../lib/prisma";
 import { getSessionUser, unauthorized } from "../../../lib/apiAuth";
 
+// Reads the session, so it is per-request. Without this Next tries to
+// prerender it at build time and logs a dynamic-server-usage error.
+export const dynamic = "force-dynamic";
+
 // GET /api/direct-message/unread
 // Returns list of senders who have unread messages for the logged-in user, with count + last message
 export async function GET() {
