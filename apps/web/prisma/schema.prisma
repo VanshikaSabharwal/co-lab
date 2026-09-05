@@ -157,6 +157,7 @@ model Group {
   planningColumns    PlanningColumn[]    @relation("GroupPlanningColumns")
   planningTasks      PlanningTask[]      @relation("GroupPlanningTasks")
   planningMilestones PlanningMilestone[] @relation("GroupPlanningMilestones")
+  inviteLinks        GroupInviteLink[]   @relation("GroupInviteLinks")
 }
 
 enum ChangeRequestStatus {
@@ -282,7 +283,7 @@ enum PlanningPriority {
 }
 
 model PlanningTask {
-  id          String    @id @default(cuid())
+  id          String            @id @default(cuid())
   // Denormalized from the column so the whole board loads in one query.
   groupId     String
   columnId    String
@@ -297,8 +298,8 @@ model PlanningTask {
   dueDate     DateTime?
   color       String?
   milestoneId String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   group     Group              @relation("GroupPlanningTasks", fields: [groupId], references: [id])
   column    PlanningColumn     @relation(fields: [columnId], references: [id], onDelete: Cascade)
@@ -372,6 +373,28 @@ model Invite {
   @@unique([phone, groupId])
 }
 
+/// A shareable join key for a group.
+///
+/// Separate from Invite, which is phone-keyed and part of a unique constraint —
+/// a link has no phone number, so widening that model would mean making a
+/// constrained column nullable. This grants **group membership only**; repo
+/// push access stays an explicit per-member owner action, so forwarding a link
+/// can never hand someone access to the GitHub repo.
+model GroupInviteLink {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  groupId   String
+  createdBy String
+  expiresAt DateTime?
+  revokedAt DateTime?
+  usedCount Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  group Group @relation("GroupInviteLinks", fields: [groupId], references: [id])
+
+  @@index([groupId])
+}
+
 model GroupMessage {
   id         String   @id @default(cuid())
   groupId    String
@@ -411,6 +434,9 @@ model ModifiedFiles {
   // Commit sha of the default branch when this draft session started —
   // the CR branch is cut from here so the author's work sits on what they saw.
   baseSha      String?
+  // A staged deletion. The row exists so the intent travels through the normal
+  // change-request review, and the file is only removed when the CR is merged.
+  deleted      Boolean @default(false)
 
   changes    Change[] @relation("changedFile")
   modifiedBy User?    @relation("userModifiedFile", fields: [modifiedById], references: [id])

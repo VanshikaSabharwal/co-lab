@@ -20,12 +20,29 @@ vi.mock("@prisma/client", () => ({
   },
 }));
 
-vi.mock("livekit-server-sdk", () => ({
-  AccessToken: class {
-    addGrant = vi.fn();
-    toJwt = vi.fn().mockReturnValue("mock-server-token");
-  },
-}));
+vi.mock("livekit-server-sdk", () => {
+  // app/lib/livekit.ts constructs this at module load, so the mock must
+  // provide it or importing the route throws before any test body runs.
+  // The spies live in the factory (vi.mock is hoisted) and are shared across
+  // instances so assertions can reach the module-level client's calls.
+  const createRoom = vi.fn();
+  const deleteRoom = vi.fn();
+  return {
+    __spies: { createRoom, deleteRoom },
+    RoomServiceClient: class {
+      createRoom = createRoom;
+      deleteRoom = deleteRoom;
+    },
+    AccessToken: class {
+      addGrant = vi.fn();
+      toJwt = vi.fn().mockResolvedValue("mock-server-token");
+    },
+  };
+});
+
+const { __spies } = (await import("livekit-server-sdk")) as unknown as {
+  __spies: { createRoom: ReturnType<typeof vi.fn>; deleteRoom: ReturnType<typeof vi.fn> };
+};
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
@@ -41,6 +58,12 @@ const mockCallRoom = {
   groupId: null,
   startedAt: new Date(),
   endedAt: null,
+  // The route authorizes via callRoom.participants; without this the
+  // fixture triggers a TypeError before any assertion is reached.
+  participants: [
+    { userId: "user-1", callId: "call-1" },
+    { userId: "user-2", callId: "call-1" },
+  ],
 };
 
 beforeEach(() => {
@@ -94,9 +117,6 @@ describe("PUT /api/calls/[id]/reject", () => {
   it("cleans up LiveKit room on reject", async () => {
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: "user-2" } });
     await PUT(makeRequest("call-1"), { params: { id: "call-1" } });
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("DeleteRoom"),
-      expect.any(Object),
-    );
+    expect(__spies.deleteRoom).toHaveBeenCalledWith("call-room-name");
   });
 });

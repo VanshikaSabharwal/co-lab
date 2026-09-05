@@ -9,6 +9,9 @@ const mockPrisma = vi.hoisted(() => ({
   callRoom: {
     create: vi.fn(),
   },
+  group: {
+    findUnique: vi.fn(),
+  },
 }));
 
 vi.mock("@prisma/client", () => ({
@@ -21,12 +24,29 @@ vi.mock("@prisma/client", () => ({
 
 const mockToJwt = vi.hoisted(() => vi.fn().mockReturnValue("mock-jwt-token"));
 
-vi.mock("livekit-server-sdk", () => ({
-  AccessToken: class {
-    addGrant = vi.fn();
-    toJwt = mockToJwt;
-  },
-}));
+vi.mock("livekit-server-sdk", () => {
+  // app/lib/livekit.ts constructs this at module load, so the mock must
+  // provide it or importing the route throws before any test body runs.
+  // Spies live in the factory (vi.mock is hoisted) and are shared across
+  // instances so tests can drive the module-level client's behaviour.
+  const createRoom = vi.fn();
+  const deleteRoom = vi.fn();
+  return {
+    __spies: { createRoom, deleteRoom },
+    RoomServiceClient: class {
+      createRoom = createRoom;
+      deleteRoom = deleteRoom;
+    },
+    AccessToken: class {
+      addGrant = vi.fn();
+      toJwt = mockToJwt;
+    },
+  };
+});
+
+const { __spies } = (await import("livekit-server-sdk")) as unknown as {
+  __spies: { createRoom: ReturnType<typeof vi.fn>; deleteRoom: ReturnType<typeof vi.fn> };
+};
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
@@ -35,6 +55,13 @@ import { getServerSession } from "next-auth";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Group calls ring the group's roster, which the route looks up.
+  mockPrisma.group.findUnique.mockResolvedValue({
+    ownerId: "user-1",
+    members: [{ userId: "user-1" }, { userId: "user-2" }],
+  });
+  __spies.createRoom.mockResolvedValue({ name: "test-room" });
+  __spies.deleteRoom.mockResolvedValue(undefined);
   mockFetch.mockResolvedValue({ ok: true });
   mockPrisma.callRoom.create.mockResolvedValue({
     id: "call-room-id",
@@ -103,22 +130,46 @@ describe("POST /api/calls/initiate", () => {
     expect(res.status).toBe(201);
   });
 
-  it("returns 201 for GROUP call", async () => {
+  it("returns 201 for GROUP call and returns the roster to ring", async () => {
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: "user-1" } });
     const res = await POST(makeRequest({ type: "GROUP", groupId: "group-1" }));
+    const json = await res.json();
     expect(res.status).toBe(201);
+    // The caller is excluded — you don't ring yourself.
+    expect(json.inviteeIds).toEqual(["user-2"]);
+  });
+
+  it("returns 404 when the group does not exist", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "user-1" } });
+    mockPrisma.group.findUnique.mockResolvedValue(null);
+    const res = await POST(makeRequest({ type: "GROUP", groupId: "nope" }));
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when the caller is the group's only member", async () => {
+    vi.mocked(getServerSession).mockResolvedValue({ user: { id: "user-1" } });
+    mockPrisma.group.findUnique.mockResolvedValue({
+      ownerId: "user-1",
+      members: [{ userId: "user-1" }],
+    });
+    const res = await POST(makeRequest({ type: "GROUP", groupId: "group-1" }));
+    expect(res.status).toBe(400);
   });
 
   it("handles LiveKit room already existing (409)", async () => {
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: "user-1" } });
-    mockFetch.mockResolvedValue({ ok: false, status: 409, statusText: "Conflict" });
+    __spies.createRoom.mockRejectedValue(
+      Object.assign(new Error("Conflict"), { status: 409 }),
+    );
     const res = await POST(makeRequest({ type: "AUDIO", targetId: "user-2" }));
     expect(res.status).toBe(201);
   });
 
   it("handles LiveKit server error", async () => {
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: "user-1" } });
-    mockFetch.mockResolvedValue({ ok: false, status: 500, statusText: "Server Error" });
+    __spies.createRoom.mockRejectedValue(
+      Object.assign(new Error("Server Error"), { status: 500 }),
+    );
     const res = await POST(makeRequest({ type: "VIDEO", targetId: "user-2" }));
     expect(res.status).toBe(500);
   });

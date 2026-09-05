@@ -11,6 +11,15 @@ const mockPrisma = vi.hoisted(() => ({
   },
 }));
 
+vi.mock("livekit-server-sdk", () => ({
+  // Signature verification belongs to the SDK. Stubbing it lets these tests
+  // exercise our payload handling; the missing/invalid-signature paths are
+  // covered separately below.
+  WebhookReceiver: class {
+    receive = vi.fn(async (rawBody: string) => JSON.parse(rawBody));
+  },
+}));
+
 vi.mock("@prisma/client", () => ({
   PrismaClient: class {
     constructor() {
@@ -39,10 +48,26 @@ describe("POST /api/calls/livekit-webhook", () => {
   function makeWebhook(body: Record<string, unknown>): Request {
     return new Request("http://localhost:3000/api/calls/livekit-webhook", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        // The route rejects unsigned requests outright; the mocked receiver
+        // above accepts any value here.
+        authorization: "Bearer test-signature",
+      },
       body: JSON.stringify(body),
     });
   }
+
+  it("returns 401 when the signature header is missing", async () => {
+    const res = await POST(
+      new Request("http://localhost:3000/api/calls/livekit-webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: "participant_joined", room: { name: "test-room" } }),
+      }),
+    );
+    expect(res.status).toBe(401);
+  });
 
   it("returns 400 when event is missing", async () => {
     const res = await POST(makeWebhook({ room: { name: "test-room" } }));

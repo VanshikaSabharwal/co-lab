@@ -60,6 +60,11 @@ async function fetchFileContent(
   return "";
 }
 
+// Groq retires models regularly — llama-3.3-70b-versatile was removed and
+// started returning 404 model_not_found. Overridable via env so the next
+// retirement is a config change, not a deploy.
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+
 export async function POST(req: Request) {
   try {
     const me = await getSessionUser();
@@ -173,7 +178,7 @@ Use proper markdown formatting. Be concise but thorough. Return ONLY the README 
             Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
           },
           body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
+            model: GROQ_MODEL,
             messages: [{ role: "user", content: prompt }],
             max_tokens: 4096,
             temperature: 0.5,
@@ -183,8 +188,16 @@ Use proper markdown formatting. Be concise but thorough. Return ONLY the README 
 
       if (!response.ok) {
         const err = await response.text();
-        console.error("Groq API error:", err);
-        throw new Error("AI generation failed");
+        console.error("Groq API error:", response.status, err);
+        // Surface Groq's own reason. "AI generation failed" gave no clue that
+        // the previous model had simply been decommissioned.
+        let detail = "";
+        try {
+          detail = JSON.parse(err)?.error?.message ?? "";
+        } catch {
+          detail = err.slice(0, 200);
+        }
+        throw new Error(detail ? `AI generation failed: ${detail}` : "AI generation failed");
       }
 
       const data = await response.json();

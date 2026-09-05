@@ -154,6 +154,10 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
             console.log("[WS] System message, ignoring:", message.type);
             return;
           }
+          // Call signalling and workspace traffic share this socket. Appending
+          // them rendered empty bubbles stamped "Invalid Date" — they have no
+          // content or createdAt. Only chat messages belong here.
+          if (message.type || !message.content) return;
           setMessages((prevMessages) => [
             ...prevMessages,
             {

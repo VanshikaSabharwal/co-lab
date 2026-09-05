@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   // Gather this member's drafts
   const drafts = await prisma.modifiedFiles.findMany({
     where: { groupId, userId: me.id },
-    select: { path: true, content: true, baseSha: true },
+    select: { path: true, content: true, baseSha: true, deleted: true },
   });
   if (drafts.length === 0) {
     return NextResponse.json({ error: "No changes to submit" }, { status: 400 });
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
       ctx,
       branchName,
       baseSha,
-      files: drafts.map((d) => ({ path: d.path, content: d.content })),
+      files: drafts.map((d) => ({ path: d.path, content: d.content, deleted: d.deleted })),
       commitMessage: title.trim(),
       author: { name: author.name, email: author.email },
       authorToken: author.token,
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
         prUrl: result.prUrl || null,
         status: result.status,
         baseSha,
-        files: drafts.map((d) => ({ path: d.path, content: d.content })),
+        files: drafts.map((d) => ({ path: d.path, content: d.content, deleted: d.deleted })),
       },
     });
 

@@ -16,6 +16,15 @@ vi.mock("@prisma/client", () => ({
 const mockToJwt = vi.hoisted(() => vi.fn().mockReturnValue("mock-jwt-token"));
 
 vi.mock("livekit-server-sdk", () => ({
+  // app/lib/livekit.ts constructs this at module load, so the mock must
+  // provide it or importing the route throws before any test body runs.
+  RoomServiceClient: class {
+    createRoom = vi.fn().mockResolvedValue({ name: "test-room" });
+    deleteRoom = vi.fn().mockResolvedValue(undefined);
+    listRooms = vi.fn().mockResolvedValue([]);
+    listParticipants = vi.fn().mockResolvedValue([]);
+    removeParticipant = vi.fn().mockResolvedValue(undefined);
+  },
   AccessToken: class {
     addGrant = vi.fn();
     toJwt = mockToJwt;

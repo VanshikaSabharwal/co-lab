@@ -9,9 +9,11 @@ interface ActiveCallBarProps {
 }
 
 export default function ActiveCallBar({ onExpand }: ActiveCallBarProps) {
-  const { activeCall, endCall } = useCall();
+  // Mute comes from the provider. This bar used to keep its own copy that
+  // always started false, so mounting it after muting in the panel pushed
+  // setMicrophoneEnabled(true) and silently un-muted the user.
+  const { activeCall, endCall, muted, toggleMute } = useCall();
   const [elapsed, setElapsed] = useState(0);
-  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
     if (!activeCall) {
@@ -24,11 +26,6 @@ export default function ActiveCallBar({ onExpand }: ActiveCallBarProps) {
     }, 1000);
     return () => clearInterval(interval);
   }, [activeCall]);
-
-  useEffect(() => {
-    if (!activeCall?.room) return;
-    activeCall.room.localParticipant.setMicrophoneEnabled(!muted);
-  }, [muted, activeCall?.room]);
 
   if (!activeCall) return null;
 
@@ -49,9 +46,10 @@ export default function ActiveCallBar({ onExpand }: ActiveCallBarProps) {
 
       <div className="flex items-center gap-2">
         <button
-          onClick={() => setMuted((m) => !m)}
+          onClick={toggleMute}
           className="rounded-full p-2 transition hover:bg-green-700"
           title={muted ? "Unmute" : "Mute"}
+          aria-label={muted ? "Unmute" : "Mute"}
         >
           {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
         </button>

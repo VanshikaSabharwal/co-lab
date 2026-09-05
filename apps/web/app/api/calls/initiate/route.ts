@@ -23,6 +23,38 @@ export async function POST(req: Request) {
   try {
     const roomName = `call-${crypto.randomUUID()}`;
 
+    // For a group call, every member is a potential participant. Resolving them
+    // here means the ring is addressed to the group's actual roster rather than
+    // to whoever happens to have a WebSocket room joined — previously a group
+    // offer reached nobody unless the recipient was already sitting on the
+    // group chat page.
+    let inviteeIds: string[] = [];
+    if (groupId) {
+      const group = await prisma.group.findUnique({
+        where: { id: groupId },
+        select: { ownerId: true, members: { select: { userId: true } } },
+      });
+      if (!group) {
+        return NextResponse.json({ error: "Group not found" }, { status: 404 });
+      }
+      const everyone = new Set<string>([
+        group.ownerId,
+        ...group.members.map((m) => m.userId),
+      ]);
+      // The caller is added separately below.
+      everyone.delete(session.user.id);
+      inviteeIds = [...everyone];
+
+      if (inviteeIds.length === 0) {
+        return NextResponse.json(
+          { error: "No one else is in this group to call" },
+          { status: 400 },
+        );
+      }
+    } else if (targetId) {
+      inviteeIds = [targetId];
+    }
+
     await ensureLiveKitRoom(roomName);
 
     const callRoom = await prisma.callRoom.create({
@@ -35,7 +67,7 @@ export async function POST(req: Request) {
         participants: {
           create: [
             { userId: session.user.id },
-            ...(targetId ? [{ userId: targetId }] : []),
+            ...inviteeIds.map((userId) => ({ userId })),
           ],
         },
       },
@@ -50,6 +82,9 @@ export async function POST(req: Request) {
       callRoom,
       token,
       roomName,
+      // Who the client should ring. Returned so the caller can address the
+      // WebSocket offer per-user instead of relying on room membership.
+      inviteeIds,
     }, { status: 201 });
   } catch (error) {
     console.error("Call initiation error:", error);

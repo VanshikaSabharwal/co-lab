@@ -5,73 +5,92 @@ import {
   deleteLiveKitRoom,
 } from "../../../app/lib/livekit";
 
-vi.mock("livekit-server-sdk", () => ({
-  AccessToken: class {
-    addGrant = vi.fn();
-    toJwt = vi.fn().mockReturnValue("mock-token");
-  },
-}));
+// vi.mock is hoisted above the imports, so the spies have to be created inside
+// the factory and read back afterwards — a top-level const would still be in
+// its temporal dead zone when app/lib/livekit.ts constructs its client.
+vi.mock("livekit-server-sdk", () => {
+  const createRoom = vi.fn();
+  const deleteRoom = vi.fn();
+  const addGrant = vi.fn();
+  const toJwt = vi.fn();
+  return {
+    // Shared across instances so assertions can reach the module-level client.
+    __spies: { createRoom, deleteRoom, addGrant, toJwt },
+    RoomServiceClient: class {
+      createRoom = createRoom;
+      deleteRoom = deleteRoom;
+    },
+    AccessToken: class {
+      addGrant = addGrant;
+      toJwt = toJwt;
+    },
+  };
+});
 
-const mockFetch = vi.fn();
-vi.stubGlobal("fetch", mockFetch);
+const { __spies } = (await import("livekit-server-sdk")) as unknown as {
+  __spies: {
+    createRoom: ReturnType<typeof vi.fn>;
+    deleteRoom: ReturnType<typeof vi.fn>;
+    addGrant: ReturnType<typeof vi.fn>;
+    toJwt: ReturnType<typeof vi.fn>;
+  };
+};
+const { createRoom, deleteRoom, addGrant, toJwt } = __spies;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockFetch.mockResolvedValue({ ok: true });
+  createRoom.mockResolvedValue({ name: "test-room" });
+  deleteRoom.mockResolvedValue(undefined);
+  toJwt.mockResolvedValue("mock-token");
 });
 
 describe("createLiveKitToken", () => {
   it("returns a JWT string", async () => {
-    const token = await createLiveKitToken("user-1", "test-room");
-    expect(typeof token).toBe("string");
-    expect(token).toBe("mock-token");
+    await expect(createLiveKitToken("user-1", "test-room")).resolves.toBe("mock-token");
   });
 
-  it("creates token with canPublish=true by default", async () => {
-    const token = await createLiveKitToken("user-1", "test-room");
-    expect(token).toBeTruthy();
+  it("grants publish rights by default", async () => {
+    await createLiveKitToken("user-1", "test-room");
+    expect(addGrant).toHaveBeenCalledWith(
+      expect.objectContaining({ room: "test-room", roomJoin: true, canPublish: true }),
+    );
   });
 
-  it("can create token with publish=false", async () => {
-    const token = await createLiveKitToken("user-1", "test-room", false);
-    expect(token).toBe("mock-token");
+  it("can issue a subscribe-only token", async () => {
+    await createLiveKitToken("user-1", "test-room", false);
+    expect(addGrant).toHaveBeenCalledWith(
+      expect.objectContaining({ canPublish: false, canSubscribe: true }),
+    );
   });
 });
 
 describe("ensureLiveKitRoom", () => {
-  it("calls LiveKit CreateRoom API", async () => {
+  it("creates the room with an empty timeout", async () => {
     await ensureLiveKitRoom("test-room");
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("CreateRoom"),
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({ "Content-Type": "application/json" }),
-      }),
+    expect(createRoom).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "test-room", emptyTimeout: 300 }),
     );
   });
 
-  it("does not throw on 409 (room already exists)", async () => {
-    mockFetch.mockResolvedValue({ ok: false, status: 409, statusText: "Conflict" });
-    await expect(ensureLiveKitRoom("test-room")).resolves.not.toThrow();
+  it("swallows 409 — the room already existing is the expected race", async () => {
+    createRoom.mockRejectedValue(Object.assign(new Error("Conflict"), { status: 409 }));
+    await expect(ensureLiveKitRoom("test-room")).resolves.toBeUndefined();
   });
 
-  it("throws on non-409 errors", async () => {
-    mockFetch.mockResolvedValue({ ok: false, status: 500, statusText: "Server Error" });
-    await expect(ensureLiveKitRoom("test-room")).rejects.toThrow("Failed to create LiveKit room");
+  it("rethrows anything that is not a 409", async () => {
+    createRoom.mockRejectedValue(Object.assign(new Error("Server Error"), { status: 500 }));
+    await expect(ensureLiveKitRoom("test-room")).rejects.toThrow("Server Error");
   });
 });
 
 describe("deleteLiveKitRoom", () => {
-  it("calls LiveKit DeleteRoom API", async () => {
+  it("deletes the named room", async () => {
     await deleteLiveKitRoom("test-room");
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("DeleteRoom"),
-      expect.objectContaining({ method: "POST" }),
-    );
+    expect(deleteRoom).toHaveBeenCalledWith("test-room");
   });
 
-  it("does not throw on error", async () => {
-    mockFetch.mockResolvedValue({ ok: false, status: 500 });
-    await expect(deleteLiveKitRoom("test-room")).resolves.not.toThrow();
+  it("never throws — cleanup failure must not break call teardown", async () => {
+    deleteRoom.mockRejectedValue(new Error("boom"));
+    await expect(deleteLiveKitRoom("test-room")).resolves.toBeUndefined();
   });
 });

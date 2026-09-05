@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "ModifiedFiles" ADD COLUMN IF NOT EXISTS "deleted" BOOLEAN NOT NULL DEFAULT false;

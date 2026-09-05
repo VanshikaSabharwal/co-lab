@@ -66,6 +66,8 @@ export async function getDefaultHeadSha(groupId: string): Promise<{ defaultBranc
 interface DraftFile {
   path: string;
   content: string; // base64 (as stored in ModifiedFiles) or plain — see decodeContent
+  /** Staged deletion — committed as a tree entry with a null sha. */
+  deleted?: boolean;
 }
 
 // ModifiedFiles stores content base64-encoded; commit needs plain UTF-8.
@@ -122,12 +124,23 @@ export async function openChangeRequestBranch(params: {
     owner,
     repo,
     base_tree: baseSha,
-    tree: files.map((f) => ({
-      path: f.path,
-      mode: "100644" as const,
-      type: "blob" as const,
-      content: decodeContent(f.content),
-    })),
+    // A null sha is how Git expresses "remove this path" in a tree. Sending
+    // content instead would recreate the file, so deletions must omit it.
+    tree: files.map((f) =>
+      f.deleted
+        ? {
+            path: f.path,
+            mode: "100644" as const,
+            type: "blob" as const,
+            sha: null,
+          }
+        : {
+            path: f.path,
+            mode: "100644" as const,
+            type: "blob" as const,
+            content: decodeContent(f.content),
+          },
+    ),
   });
 
   const commit = await commitKit.rest.git.createCommit({

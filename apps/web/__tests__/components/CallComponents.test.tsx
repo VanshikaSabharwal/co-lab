@@ -27,6 +27,19 @@ vi.mock("livekit-client", () => ({
     ParticipantDisconnected: "participantDisconnected",
     Disconnected: "disconnected",
     MediaDevicesError: "mediaDevicesError",
+    TrackSubscribed: "trackSubscribed",
+    TrackUnsubscribed: "trackUnsubscribed",
+  },
+  // VideoTile subscribes to these to re-render on publish/mute changes.
+  ParticipantEvent: {
+    TrackPublished: "trackPublished",
+    TrackSubscribed: "trackSubscribed",
+    TrackUnsubscribed: "trackUnsubscribed",
+    TrackMuted: "trackMuted",
+    TrackUnmuted: "trackUnmuted",
+    LocalTrackPublished: "localTrackPublished",
+    LocalTrackUnpublished: "localTrackUnpublished",
+    IsSpeakingChanged: "isSpeakingChanged",
   },
   Track: {
     Kind: { Video: "video", Audio: "audio" },
@@ -132,10 +145,14 @@ describe("VideoTile", () => {
     isMicrophoneEnabled: true,
     isCameraEnabled: false,
     trackPublications: {
-      forEach: vi.fn((cb) => {
-        // simulate tracks
+      forEach: vi.fn(() => {
+        // No published tracks in this fixture.
       }),
     },
+    // VideoTile subscribes to participant events to re-render on
+    // publish/mute/speaking changes, so the fixture needs an emitter surface.
+    on: vi.fn(),
+    off: vi.fn(),
   };
 
   it("renders with participant name", () => {
@@ -145,12 +162,15 @@ describe("VideoTile", () => {
 
   it("shows local label when isLocal", () => {
     const { container } = render(<VideoTile participant={mockParticipant as any} isLocal={true} />);
-    expect(container.textContent).toContain("(You)");
+    expect(container.textContent).toContain("You");
   });
 
   it("shows avatar fallback when camera is off", () => {
     const { container } = render(<VideoTile participant={mockParticipant as any} />);
-    expect(container.innerHTML).not.toContain("<video");
+    // The <video> element is always mounted (hidden) so its ref stays valid
+    // across camera toggles — the fallback is what signals "camera off".
+    expect(container.querySelector("video")?.className).toContain("hidden");
+    expect(container.querySelector("svg")).toBeTruthy();
   });
 });
 
@@ -181,8 +201,8 @@ describe("ParticipantList", () => {
 
   it("renders participant names", () => {
     render(<ParticipantList participants={mockParticipants as any[]} />);
-    expect(screen.getByText("Alice")).toBeTruthy();
-    expect(screen.getByText("Bob")).toBeTruthy();
+    expect(screen.getByText(/Alice/)).toBeTruthy();
+    expect(screen.getByText(/Bob/)).toBeTruthy();
   });
 
   it("shows speaking indicator", () => {

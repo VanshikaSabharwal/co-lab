@@ -12,7 +12,6 @@ interface VideoTileProps {
 
 export default function VideoTile({ participant, isLocal }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   // LiveKit mutates the participant object in place; force a re-render on its
   // events so the getters below (isCameraEnabled, isSpeaking…) stay current.
   const [, rerender] = useReducer((n: number) => n + 1, 0);
@@ -20,22 +19,19 @@ export default function VideoTile({ participant, isLocal }: VideoTileProps) {
   const isSpeaking = participant.isSpeaking;
   const isMuted = participant.isMicrophoneEnabled === false;
   const hasVideo = participant.isCameraEnabled;
-  const identity = participant.identity;
-  const name = participant.name || identity || "Unknown";
+  const name = participant.name?.trim() || "Unknown";
 
   useEffect(() => {
     const videoEl = videoRef.current;
-    const audioEl = audioRef.current;
 
     function attach(pub: TrackPublication) {
       if (!pub.track) return;
       if (pub.kind === Track.Kind.Video && videoEl) {
         pub.track.attach(videoEl);
       }
-      // Don't play your own mic back to yourself
-      if (pub.kind === Track.Kind.Audio && audioEl && !isLocal) {
-        pub.track.attach(audioEl);
-      }
+      // Audio is deliberately not attached here. RoomAudioRenderer owns
+      // playback for the whole call — attaching in both places double-plays
+      // every remote track, and tiles only exist while the panel is expanded.
     }
 
     // (Re)attach every current publication and re-render for the getters.
@@ -90,14 +86,11 @@ export default function VideoTile({ participant, isLocal }: VideoTileProps) {
         </div>
       )}
 
-      <audio ref={audioRef} autoPlay playsInline />
-
       <div className="absolute bottom-0 left-0 right-0 flex items-center gap-2 bg-gradient-to-t from-black/60 to-transparent p-2">
         {isMuted && <MicOff className="h-3.5 w-3.5 text-red-400" />}
         <span className="text-xs font-medium text-white">
           {name}
-          {identity !== name ? ` (${identity})` : ""}
-          {isLocal ? " - You" : ""}
+          {isLocal ? " (You)" : ""}
         </span>
       </div>
     </div>

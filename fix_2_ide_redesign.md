@@ -19,6 +19,8 @@ Status legend: ☐ todo · ◐ in progress · ☑ done
 | Diagnostics | **CodeMirror's built-in linting** (`@codemirror/lint`). Real, in-browser, no server calls. |
 | "+ New Project" | **Links to the existing `/create-group` flow.** No duplicated repo-binding logic. |
 | Themes | Light and dark, consistent with the rest of the app. |
+| **Mobile** | **Responsive, one codebase.** Sidebar → drawer below `md:`, bottom tab bar (Files/Collab/Settings), AI panel → floating button opening a sheet. |
+| **Sequencing** | **Layout first, AI wired after.** FIX-2.4 splits: panel UI ships with the shell; Groq streaming + Apply Fix land as a separate step. |
 
 ---
 

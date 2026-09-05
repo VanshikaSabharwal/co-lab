@@ -15,15 +15,10 @@ interface CallPanelProps {
 }
 
 export default function CallPanel({ onMinimize }: CallPanelProps) {
-  const { activeCall, endCall } = useCall();
+  // Mic/camera state is owned by CallProvider so this panel and the minimised
+  // bar can never disagree about whether you're muted.
+  const { activeCall, endCall, muted, videoEnabled, toggleMute, toggleVideo } = useCall();
 
-  // Every call starts with mic and camera OFF — the user opts in.
-  const [muted, setMuted] = useState(true);
-  const [videoEnabled, setVideoEnabled] = useState(false);
-  // "Click here" hints show at the start and disappear for good once the user
-  // clicks that control for the first time.
-  const [micHintDismissed, setMicHintDismissed] = useState(false);
-  const [videoHintDismissed, setVideoHintDismissed] = useState(false);
   const [participantListOpen, setParticipantListOpen] = useState(false);
   const [screenShareOpen, setScreenShareOpen] = useState(false);
   const [participants, setParticipants] = useState<any[]>([]);
@@ -35,23 +30,26 @@ export default function CallPanel({ onMinimize }: CallPanelProps) {
     if (!room) return;
     const update = () => setParticipants([...room.remoteParticipants.values()]);
     update(); // populate with already-connected participants
-    room.on("participantConnected", update);
-    room.on("participantDisconnected", update);
+    // Track events matter as much as join/leave: someone who joins with their
+    // camera off and enables it later publishes a track without any
+    // participantConnected firing, so their video would never appear.
+    const events = [
+      "participantConnected",
+      "participantDisconnected",
+      "trackPublished",
+      "trackUnpublished",
+      "trackSubscribed",
+      "trackUnsubscribed",
+      "trackMuted",
+      "trackUnmuted",
+    ];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    events.forEach((e) => room.on(e as any, update));
     return () => {
-      room.off("participantConnected", update);
-      room.off("participantDisconnected", update);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      events.forEach((e) => room.off(e as any, update));
     };
   }, [room]);
-
-  useEffect(() => {
-    if (!room) return;
-    room.localParticipant.setMicrophoneEnabled(!muted);
-  }, [muted, room]);
-
-  useEffect(() => {
-    if (!room) return;
-    room.localParticipant.setCameraEnabled(videoEnabled);
-  }, [videoEnabled, room]);
 
   // Auto-open the screen-share view when anyone (local or remote) starts
   // sharing, and close it when the share ends.
@@ -143,16 +141,8 @@ export default function CallPanel({ onMinimize }: CallPanelProps) {
           videoEnabled={videoEnabled}
           screenSharing={isSharing}
           participantListOpen={participantListOpen}
-          showMicHint={!micHintDismissed}
-          showVideoHint={!videoHintDismissed}
-          onToggleMute={() => {
-            setMicHintDismissed(true);
-            setMuted((m) => !m);
-          }}
-          onToggleVideo={() => {
-            setVideoHintDismissed(true);
-            setVideoEnabled((v) => !v);
-          }}
+          onToggleMute={toggleMute}
+          onToggleVideo={toggleVideo}
           onToggleScreenShare={handleToggleScreenShare}
           onToggleParticipantList={() => setParticipantListOpen((p) => !p)}
           onEndCall={endCall}

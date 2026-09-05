@@ -243,6 +243,11 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         ws.onmessage = (event) => {
           const message = JSON.parse(event.data);
           if (message.type === "pong" || message.type === "connection_established") return;
+          // Only chat messages belong in the transcript. Call signalling and
+          // workspace/presence traffic share this socket, and appending those
+          // rendered empty bubbles stamped "Invalid Date" — they carry no
+          // content or createdAt. CallProvider handles them separately.
+          if (message.type || !message.content) return;
           setMessages((prev) => [
             ...prev,
             {

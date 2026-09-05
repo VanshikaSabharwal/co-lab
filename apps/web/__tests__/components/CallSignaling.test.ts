@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterAll } from "vitest";
 
 class MockWebSocket {
   readyState: number = WebSocket.OPEN;

@@ -212,19 +212,17 @@ describe("CallUI", () => {
     renderWithProvider(<Setter />);
     fireEvent.click(screen.getByTestId("set-active"));
 
-    // Click expand button
+    // CallUI auto-expands when a call becomes active, so the panel — not the
+    // minimized bar — is what shows first.
+    fireEvent.click(screen.getByTitle("Minimize"));
+
+    // Now the compact bar is showing.
     const expandBtn = screen.getByTitle("Expand call");
+    expect(expandBtn).toBeTruthy();
+
+    // And expanding returns to the full panel.
     fireEvent.click(expandBtn);
-
-    // Should now show the full CallPanel with minimize button
-    const minimizeBtn = screen.getByTitle("Minimize");
-    expect(minimizeBtn).toBeTruthy();
-
-    // Click minimize
-    fireEvent.click(minimizeBtn);
-
-    // Should be back to ActiveCallBar
-    expect(screen.getByTitle("Expand call")).toBeTruthy();
+    expect(screen.getByTitle("Minimize")).toBeTruthy();
   });
 
   it("rejects incoming call and clears it", () => {

@@ -15,11 +15,22 @@ import { php } from "@codemirror/lang-php";
 import { sql } from "@codemirror/lang-sql";
 import { cpp } from "@codemirror/lang-cpp";
 import { type Extension } from "@codemirror/state";
+import { hasLinter } from "./lib/fileTypes";
 import CodeMirror from "@uiw/react-codemirror";
+import { linter, lintGutter, type Diagnostic } from "@codemirror/lint";
 import toast from "react-hot-toast";
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import IdeShell, { type IdeSection } from "./components/IdeShell";
+import EditorTabs from "./components/EditorTabs";
+import EditorBreadcrumb from "./components/EditorBreadcrumb";
+import EditorStatusBar from "./components/EditorStatusBar";
+import AiAssistantPanel from "./components/AiAssistantPanel";
+import CollaborationPanel from "./components/CollaborationPanel";
+import LargeFileViewer from "./LargeFileViewer";
+import ImagePreview from "./ImagePreview";
+import { Bot } from "lucide-react";
 import {
   Globe,
   ExternalLink,
@@ -36,6 +47,8 @@ import {
   ChevronDown,
   File,
   GitBranch,
+  Trash2,
+  Undo2,
 } from "lucide-react";
 
 interface CodeProps {
@@ -156,6 +169,94 @@ function getFileLanguage(fileName: string) {
   return lang ? lang() : javascript();
 }
 
+/**
+ * How the open file is being presented when it isn't editable text.
+ *
+ * "chunked" is a viewer, not a failure: the file is readable, just streamed in
+ * ranges rather than loaded into CodeMirror.
+ */
+interface FileNotice {
+  kind: "image" | "binary" | "tooLarge" | "chunked";
+  name: string;
+  size: number;
+  downloadUrl: string | null;
+}
+
+/**
+ * Turn a /api/file-content response into a notice, or null for plain text the
+ * editor should load normally.
+ */
+function noticeFor(
+  data: {
+    binary?: boolean;
+    isImage?: boolean;
+    chunked?: boolean;
+    tooLarge?: boolean;
+    size?: number;
+    name?: string;
+    downloadUrl?: string | null;
+  },
+  fallbackName: string,
+): FileNotice | null {
+  const shared = {
+    name: data.name || fallbackName,
+    size: data.size ?? 0,
+    downloadUrl: data.downloadUrl ?? null,
+  };
+  if (data.tooLarge) return { kind: "tooLarge", ...shared };
+  if (data.chunked) return { kind: "chunked", ...shared };
+  if (data.binary) {
+    return { kind: data.isImage ? "image" : "binary", ...shared };
+  }
+  return null;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
+
+/**
+ * Stands in for the editor for non-image binaries and files past the viewer's
+ * ceiling. Images have their own component; large text has the chunked viewer.
+ */
+function FilePlaceholder({ notice }: { notice: FileNotice }) {
+  return (
+    <div className="flex h-full items-center justify-center overflow-auto p-8">
+      <div className="flex max-w-lg flex-col items-center gap-3 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-gray-800 text-gray-400">
+          <FileCode size={28} />
+        </div>
+
+        <p className="text-sm font-medium text-gray-200">{notice.name}</p>
+        <p className="text-xs text-gray-500">
+          {notice.kind === "tooLarge"
+            ? `This file is too large to open (${formatBytes(notice.size)})`
+            : `${formatBytes(notice.size)} · binary file, can't be shown as text`}
+        </p>
+
+        {notice.downloadUrl && (
+          <a
+            href={notice.downloadUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-100 transition hover:bg-gray-600"
+          >
+            Download
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function getFileIcon(fileName: string) {
   const ext = "." + fileName.split(".").pop()?.toLowerCase();
   const match = FILE_ICON_MAP[ext];
@@ -247,7 +348,18 @@ export default function Editor({ github, group }: CodeProps) {
   // Commit sha the selected branch is at — stamped onto drafts so a CR branch
   // is cut from what the author saw.
   const [baseSha, setBaseSha] = useState<string | null>(null);
-  const canEdit = codeAccess === "ACTIVE";
+  // Set when the open file isn't editable text — an image, another binary, or a
+  // file too large to render. Null means a normal text file is in the editor.
+  const [fileNotice, setFileNotice] = useState<FileNotice | null>(null);
+  // True for text files past the editable size tier: shown, but not edited.
+  const [sizeReadOnly, setSizeReadOnly] = useState(false);
+  // 1–5 MB: still editable, but linting and full-file language parsing come off
+  // because both traverse the entire document on every change.
+  const [heavyFile, setHeavyFile] = useState(false);
+  // Permission to edit this repo at all, independent of which file is open.
+  const hasCodeAccess = codeAccess === "ACTIVE";
+  // …and whether the file currently open is something the editor can edit.
+  const canEdit = hasCodeAccess && !sizeReadOnly && !fileNotice;
 
   // Branch selection (auto-fetched from GitHub)
   const [branches, setBranches] = useState<
@@ -259,6 +371,20 @@ export default function Editor({ github, group }: CodeProps) {
   // The group's stored GitHub token expired/was revoked (GitHub App tokens
   // expire ~8h) — show a reconnect banner.
   const [authExpired, setAuthExpired] = useState(false);
+  const [ideSection, setIdeSection] = useState<IdeSection>("files");
+  const [fileSearch, setFileSearch] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  // Docked-panel collapse (desktop only); the mobile sheet uses aiOpen.
+  const [aiCollapsed, setAiCollapsed] = useState(false);
+  // Paths staged for deletion — struck through in the tree until the change
+  // request is merged, at which point the file is actually removed.
+  const [deletedPaths, setDeletedPaths] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<TreeNode | null>(null);
+  const [diagnostics, setDiagnostics] = useState<{ errors: number; warnings: number }>({
+    errors: 0,
+    warnings: 0,
+  });
   const [reconnecting, setReconnecting] = useState(false);
 
   const handleReconnectGithub = async () => {
@@ -295,21 +421,75 @@ export default function Editor({ github, group }: CodeProps) {
 
   const router = useRouter();
 
-  const fileTree = useMemo(() => buildFileTree(files), [files]);
+  // Only JSON has an in-browser linter today. The status bar shows "—" for
+  // everything else rather than a 0 that would imply a clean check.
+  const lintExtension = useMemo(
+    () =>
+      linter((view): Diagnostic[] => {
+        const found: Diagnostic[] = [];
+        if (hasLinter(fileName)) {
+          const text = view.state.doc.toString();
+          if (text.trim()) {
+            try {
+              JSON.parse(text);
+            } catch (err) {
+              const message = err instanceof Error ? err.message : "Invalid JSON";
+              const at = /position (\d+)/.exec(message);
+              const pos = at ? Math.min(Number(at[1]), view.state.doc.length) : 0;
+              found.push({ from: pos, to: pos, severity: "error", message });
+            }
+          }
+        }
+        setDiagnostics({
+          errors: found.filter((d) => d.severity === "error").length,
+          warnings: found.filter((d) => d.severity === "warning").length,
+        });
+        return found;
+      }),
+    [fileName],
+  );
 
+  const fileTree = useMemo(() => {
+    const q = fileSearch.trim().toLowerCase();
+    // Filter before shaping so a matching file keeps its folder ancestry.
+    const source = q ? files.filter((f) => f.path.toLowerCase().includes(q)) : files;
+    return buildFileTree(source);
+  }, [files, fileSearch]);
+
+  /**
+   * Open a file, committing UI state only once the content is in hand.
+   *
+   * The breadcrumb, tab and editor body used to be set before the fetch, so a
+   * failed load left the header naming a file whose contents were never shown —
+   * with the previous file's text still on screen underneath it.
+   */
   const loadFileContent = useCallback(
     async (file: CodeFile) => {
       if (!file) return;
-      setFilePath(file.path);
-      setFileName(file.name);
 
-      if (file._generated) {
-        setFileContent(file.content || "");
-        setOriginalContent(file.content || "");
-        setIsEdited(true);
+      // Commit every piece of "this file is open" state together.
+      const show = (opts: {
+        content: string;
+        notice?: FileNotice | null;
+        readOnly?: boolean;
+        heavy?: boolean;
+        edited?: boolean;
+      }) => {
+        setFilePath(file.path);
+        setFileName(file.name);
+        setFileContent(opts.content);
+        setOriginalContent(opts.content);
+        setFileNotice(opts.notice ?? null);
+        setSizeReadOnly(opts.readOnly ?? false);
+        setHeavyFile(opts.heavy ?? false);
+        setIsEdited(opts.edited ?? false);
         setOpenFiles((prev) =>
           prev.includes(file.path) ? prev : [...prev, file.path],
         );
+      };
+
+      if (file._generated) {
+        show({ content: file.content || "", edited: true });
         return;
       }
 
@@ -317,11 +497,7 @@ export default function Editor({ github, group }: CodeProps) {
       const cacheKey = `${currentBranch}:${file.path}`;
       const cached = contentCache.current.get(cacheKey);
       if (cached !== undefined) {
-        setFileContent(cached);
-        setOriginalContent(cached);
-        setOpenFiles((prev) =>
-          prev.includes(file.path) ? prev : [...prev, file.path],
-        );
+        show({ content: cached });
         return;
       }
 
@@ -336,18 +512,34 @@ export default function Editor({ github, group }: CodeProps) {
           }),
         });
         if (!res.ok) {
-          const err = await res.json();
+          const err = await res.json().catch(() => ({}));
           throw new Error(err.error || "Failed to fetch file content");
         }
         const data = await res.json();
+
+        // Anything that isn't plain editable text opens a viewer instead. None
+        // of it is cached — the cache holds editable text only, and the chunk
+        // viewer maintains its own bounded cache.
+        const notice = noticeFor(data, file.name);
+        if (notice) {
+          show({ content: "", notice });
+          return;
+        }
+
         contentCache.current.set(cacheKey, data.content);
-        setFileContent(data.content);
-        setOriginalContent(data.content);
-        setOpenFiles((prev) =>
-          prev.includes(file.path) ? prev : [...prev, file.path],
+        show({
+          content: data.content,
+          readOnly: !!data.readOnly,
+          heavy: !!data.heavy,
+        });
+      } catch (err) {
+        // Nothing above ran, so the previously open file stays put — the
+        // breadcrumb keeps naming what's actually on screen.
+        toast.error(
+          err instanceof Error && err.message
+            ? err.message
+            : "Failed to load the file content.",
         );
-      } catch {
-        toast.error("Failed to load the file content.");
       }
     },
     [group, currentBranch],
@@ -366,10 +558,7 @@ export default function Editor({ github, group }: CodeProps) {
             const data: CodeFile[] = await filesRes.json();
             setFiles(data);
             if (data.length > 0) {
-              const firstFile = data[0]!;
-              setFileName(firstFile.name);
-              setFilePath(firstFile.path);
-              await loadFileContent(firstFile);
+              await loadFileContent(data[0]!);
             }
           } else {
             const errBody = await filesRes.json().catch(() => ({}));
@@ -469,13 +658,11 @@ export default function Editor({ github, group }: CodeProps) {
   };
 
   const handleFileClick = async (file: CodeFile) => {
+    // Expanding the tree is safe to do up front — it only reveals the node in
+    // the sidebar. Naming the file is loadFileContent's job, and only once the
+    // content actually arrives.
     expandToFile(file.path);
-    setFileName(file.name);
-    setFilePath(file.path);
     await loadFileContent(file);
-    if (!file._generated) {
-      setIsEdited(false);
-    }
   };
 
   // Switch the branch being viewed/edited: refetch its tree, reset caches,
@@ -504,6 +691,9 @@ export default function Editor({ github, group }: CodeProps) {
           setOriginalContent("");
           setFilePath("");
           setFileName("");
+          setFileNotice(null);
+          setSizeReadOnly(false);
+          setHeavyFile(false);
         }
       } else {
         toast.error("Failed to load that branch.");
@@ -518,14 +708,29 @@ export default function Editor({ github, group }: CodeProps) {
   // Load content for a file on a specific branch (used right after switching,
   // before the currentBranch state has propagated to loadFileContent).
   const loadFileContentFor = async (file: CodeFile, branch: string) => {
-    setFilePath(file.path);
-    setFileName(file.name);
+    // Same success-first ordering as loadFileContent: nothing about the open
+    // file changes until there's content to show.
+    const show = (opts: {
+      content: string;
+      notice?: FileNotice | null;
+      readOnly?: boolean;
+      heavy?: boolean;
+    }) => {
+      setFilePath(file.path);
+      setFileName(file.name);
+      setFileContent(opts.content);
+      setOriginalContent(opts.content);
+      setFileNotice(opts.notice ?? null);
+      setSizeReadOnly(opts.readOnly ?? false);
+      setHeavyFile(opts.heavy ?? false);
+      setIsEdited(false);
+      setOpenFiles([file.path]);
+    };
+
     const cacheKey = `${branch}:${file.path}`;
     const cached = contentCache.current.get(cacheKey);
     if (cached !== undefined) {
-      setFileContent(cached);
-      setOriginalContent(cached);
-      setOpenFiles([file.path]);
+      show({ content: cached });
       return;
     }
     try {
@@ -534,15 +739,28 @@ export default function Editor({ github, group }: CodeProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ groupId: group, filePath: file.path, ref: branch }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        contentCache.current.set(cacheKey, data.content);
-        setFileContent(data.content);
-        setOriginalContent(data.content);
-        setOpenFiles([file.path]);
+      // A non-ok response used to fall through in silence, leaving the editor
+      // showing the previous branch's content under the new file's name.
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to fetch file content");
       }
-    } catch {
-      toast.error("Failed to load the file content.");
+      const data = await res.json();
+
+      const notice = noticeFor(data, file.name);
+      if (notice) {
+        show({ content: "", notice });
+        return;
+      }
+
+      contentCache.current.set(cacheKey, data.content);
+      show({ content: data.content, readOnly: !!data.readOnly, heavy: !!data.heavy });
+    } catch (err) {
+      toast.error(
+        err instanceof Error && err.message
+          ? err.message
+          : "Failed to load the file content.",
+      );
     }
   };
 
@@ -655,6 +873,11 @@ export default function Editor({ github, group }: CodeProps) {
       setFilePath(virtualFile.path);
       setFileContent(virtualFile.content || "");
       setOriginalContent(virtualFile.content || "");
+      // A generated file is always editable text, so clear any placeholder the
+      // previously open file left behind.
+      setFileNotice(null);
+      setSizeReadOnly(false);
+      setHeavyFile(false);
       setIsEdited(true);
       setOpenFiles((prev) =>
         prev.includes(virtualFile.path) ? prev : [...prev, virtualFile.path],
@@ -729,130 +952,164 @@ export default function Editor({ github, group }: CodeProps) {
     }
 
     const { icon, color } = getFileIcon(node.name);
+    const stagedForDelete = deletedPaths.has(node.path);
     return (
-      <button
+      // A div, not a button: the delete control is itself a button and nesting
+      // one inside another is invalid HTML (and breaks click handling).
+      <div
         key={node.path}
-        onClick={() => node.file && handleFileClick(node.file)}
-        className={`w-full flex items-center gap-1 px-2 py-1 text-left text-sm transition-colors duration-150 rounded-sm ${
+        className={`group flex w-full items-center gap-1 rounded-sm px-2 py-1 text-sm transition-colors duration-150 ${
           isSelected
             ? "bg-gray-700 text-white"
             : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
         }`}
         style={{ paddingLeft: `${28 + depth * 16}px` }}
       >
-        <span className={`w-4 h-4 flex items-center justify-center shrink-0 ${color}`}>
-          {icon}
-        </span>
-        <span className="truncate">{node.name}</span>
-        {node.file?._generated && (
-          <Sparkles className="w-3 h-3 ml-1 text-yellow-400 shrink-0" />
+        <button
+          onClick={() => node.file && handleFileClick(node.file)}
+          className="flex min-w-0 flex-1 items-center gap-1 text-left"
+        >
+          <span className={`w-4 h-4 flex items-center justify-center shrink-0 ${color}`}>
+            {icon}
+          </span>
+          <span className={`truncate ${stagedForDelete ? "line-through opacity-60" : ""}`}>
+            {node.name}
+          </span>
+          {node.file?._generated && (
+            <Sparkles className="w-3 h-3 ml-1 text-yellow-400 shrink-0" />
+          )}
+        </button>
+
+        {/* Deletion is an edit, so it needs the same access as typing. */}
+        {canEdit && node.file && !node.file._generated && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              stagedForDelete ? restoreFile(node.path) : setDeleteTarget(node);
+            }}
+            aria-label={
+              stagedForDelete ? `Undo delete of ${node.name}` : `Delete ${node.name}`
+            }
+            title={
+              stagedForDelete
+                ? "Undo staged deletion"
+                : "Delete file (applied when the change request is merged)"
+            }
+            className={`shrink-0 rounded p-0.5 transition-opacity hover:bg-gray-700 ${
+              stagedForDelete
+                ? "text-amber-400 opacity-100"
+                : "text-gray-500 opacity-0 hover:text-red-400 focus:opacity-100 group-hover:opacity-100"
+            }`}
+          >
+            {stagedForDelete ? <Undo2 size={13} /> : <Trash2 size={13} />}
+          </button>
         )}
-      </button>
+      </div>
     );
   };
 
+  // Staged deletions live in the DB, so rehydrate them — otherwise a reload
+  // would show a file as present while it's still queued for removal.
+  useEffect(() => {
+    if (!group) return;
+    let cancelled = false;
+    fetch(`/api/modified-files?group=${group}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((drafts: { path: string; deleted?: boolean; userId: string }[]) => {
+        if (cancelled || !Array.isArray(drafts)) return;
+        setDeletedPaths(
+          new Set(
+            drafts
+              // The owner also receives other members' drafts from this route;
+              // only the current user's staged deletions are theirs to undo.
+              .filter((d) => d.deleted && d.userId === userId)
+              .map((d) => d.path),
+          ),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [group, userId]);
+
+  const stageDelete = async (node: TreeNode) => {
+    setDeleteTarget(null);
+    try {
+      const res = await fetch("/api/delete-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: node.name, path: node.path, group }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      setDeletedPaths((prev) => new Set(prev).add(node.path));
+      setIsEdited(true);
+      toast.success("Staged for deletion — raise a change request to apply it");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't stage the deletion");
+    }
+  };
+
+  const restoreFile = async (path: string) => {
+    try {
+      const res = await fetch("/api/delete-file", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path, group }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      setDeletedPaths((prev) => {
+        const next = new Set(prev);
+        next.delete(path);
+        return next;
+      });
+      toast.success("Deletion undone");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't undo the deletion");
+    }
+  };
+
+  const activeFileName =
+    files.find((f) => f.path === filePath)?.name || filePath.split("/").pop() || fileName;
+
   return (
-    <div className="flex h-screen bg-gray-900 text-white">
-      {/* Left Sidebar - File Explorer */}
-      <div className="w-64 flex flex-col bg-gray-900 border-r border-gray-700/50 shrink-0">
-        {/* Sidebar Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/50">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-            Files
-          </h2>
-          <span className="text-xs text-gray-500">{files.length}</span>
-        </div>
-
-        {/* Branch selector */}
-        <div className="relative border-b border-gray-700/50 px-3 py-2">
-          <button
-            onClick={() => setBranchMenuOpen((o) => !o)}
-            className="flex w-full items-center gap-2 rounded border border-gray-700 bg-gray-800/60 px-2.5 py-1.5 text-xs text-gray-200 hover:border-gray-600"
-            title="Switch branch"
-          >
-            <GitBranch size={13} className="shrink-0 text-gray-400" />
-            <span className="truncate">{currentBranch || "loading…"}</span>
-            <ChevronDown size={13} className="ml-auto shrink-0 text-gray-500" />
-          </button>
-
-          {branchMenuOpen && (
-            <div className="absolute left-3 right-3 z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-gray-700 bg-gray-800 shadow-xl">
-              <input
-                autoFocus
-                value={branchQuery}
-                onChange={(e) => setBranchQuery(e.target.value)}
-                placeholder="Find a branch…"
-                className="w-full border-b border-gray-700 bg-gray-900 px-2.5 py-2 text-xs text-gray-200 outline-none"
-              />
-              {(() => {
-                const q = branchQuery.toLowerCase();
-                const filtered = branches.filter((b) => b.name.toLowerCase().includes(q));
-                const ordered = [
-                  ...filtered.filter((b) => b.isDefault),
-                  ...filtered.filter((b) => b.isChangeRequest && !b.isDefault),
-                  ...filtered.filter((b) => !b.isDefault && !b.isChangeRequest),
-                ];
-                if (ordered.length === 0)
-                  return <p className="px-2.5 py-3 text-xs text-gray-500">No branches</p>;
-                return ordered.map((b) => (
-                  <button
-                    key={b.name}
-                    onClick={() => switchBranch(b.name)}
-                    className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-xs hover:bg-gray-700/60"
-                  >
-                    <GitBranch size={12} className="shrink-0 text-gray-500" />
-                    <span className="truncate text-gray-200">{b.name}</span>
-                    {b.isDefault && (
-                      <span className="ml-auto rounded bg-gray-700 px-1.5 py-0.5 text-[10px] text-gray-300">
-                        default
-                      </span>
-                    )}
-                    {b.isChangeRequest && !b.isDefault && (
-                      <span className="ml-auto rounded bg-blue-900/60 px-1.5 py-0.5 text-[10px] text-blue-300">
-                        CR
-                      </span>
-                    )}
-                    {b.name === currentBranch && <Check size={12} className="shrink-0 text-green-400" />}
-                  </button>
-                ));
-              })()}
-            </div>
-          )}
-        </div>
-
-        {/* File Tree */}
-        <div className="flex-1 overflow-y-auto py-2">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="flex items-center gap-2 text-gray-500 text-sm">
-                <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" />
-                Loading files...
-              </div>
-            </div>
-          ) : fileTree.length === 0 ? (
-            <p className="text-gray-500 text-sm px-4 py-8 text-center">
-              No files found
-            </p>
-          ) : (
-            fileTree.map((node) => renderTreeNode(node, 0))
-          )}
-        </div>
-
-        {/* Sidebar Footer */}
-        <div className="p-3 border-t border-gray-700/50 space-y-2">
-          <button
-            onClick={handleGenerateReadme}
-            disabled={generatingReadme}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded bg-purple-600/80 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <FileText size={14} />
-            {generatingReadme ? "Generating..." : "Generate AI README"}
-          </button>
-        </div>
-      </div>
-
+    <IdeShell
+      repo={github}
+      section={ideSection}
+      onSectionChange={setIdeSection}
+      search={fileSearch}
+      onSearchChange={setFileSearch}
+      menuOpen={menuOpen}
+      onMenuOpenChange={setMenuOpen}
+      onOpenAi={() => setAiOpen(true)}
+      explorer={
+        loading ? (
+          <div className="flex items-center gap-2 px-3 py-6 text-sm text-gray-500">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-500 border-t-transparent" />
+            Loading files…
+          </div>
+        ) : fileTree.length === 0 ? (
+          <p className="px-3 py-6 text-center text-sm text-gray-500">
+            {fileSearch ? "No matching files" : "No files found"}
+          </p>
+        ) : (
+          <>{fileTree.map((node) => renderTreeNode(node, 0))}</>
+        )
+      }
+    >
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {ideSection === "collaboration" ? (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <CollaborationPanel groupId={group} repo={github} />
+        </div>
+      ) : ideSection === "settings" ? (
+        <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Settings are coming soon.
+          </p>
+        </div>
+      ) : (
+      <div className="flex min-w-0 min-h-0 flex-1 flex-col">
         {/* Top Toolbar */}
         <div className="flex items-center justify-between px-4 py-2 bg-gray-800/80 border-b border-gray-700/50">
           <div className="flex items-center gap-2 min-w-0">
@@ -947,50 +1204,21 @@ export default function Editor({ github, group }: CodeProps) {
           </div>
         </div>
 
-        {/* Tabs Bar */}
-        <div className="flex bg-gray-800/40 border-b border-gray-700/50 overflow-x-auto">
-          {openFiles.length === 0 ? (
-            <div className="px-4 py-2 text-xs text-gray-600">
-              Select a file to open
-            </div>
-          ) : (
-            openFiles.map((path) => {
-              const f =
-                files.find((fl) => fl.path === path) ||
-                findFileInTree(fileTree, path);
-              const { color } = f ? getFileIcon(f.name) : { color: "text-gray-400" };
-              return (
-                <div
-                  key={path}
-                  className={`group flex items-center gap-1.5 px-3 py-2 text-xs cursor-pointer border-r border-gray-700/50 transition-colors ${
-                    filePath === path
-                      ? "bg-gray-800 text-white border-t-2 border-t-blue-500"
-                      : "bg-gray-900/50 text-gray-400 hover:bg-gray-800/50 hover:text-gray-300"
-                  }`}
-                >
-                  <span
-                    className={`w-3.5 h-3.5 flex items-center justify-center shrink-0 ${color}`}
-                  >
-                    {f ? getFileIcon(f.name).icon : <File size={13} />}
-                  </span>
-                  <span className="truncate max-w-32">{f?.name || path}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeTab(path);
-                    }}
-                    className="ml-1 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-gray-700 transition-opacity"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
+        <EditorTabs
+          openFiles={openFiles}
+          activePath={filePath}
+          dirtyPaths={isEdited && filePath ? new Set([filePath]) : undefined}
+          onSelect={(p) => {
+            const f = files.find((fl) => fl.path === p) || findFileInTree(fileTree, p);
+            if (f) handleFileClick(f);
+          }}
+          onClose={closeTab}
+        />
+
+        <EditorBreadcrumb repo={github} path={filePath} />
 
         {/* Code Editor */}
-        <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* GitHub token expired — offer a one-click reconnect */}
           {authExpired && (
             <div className="flex items-center justify-between gap-3 border-b border-red-800/60 bg-red-950/50 px-4 py-2.5 text-xs text-red-200">
@@ -1008,8 +1236,21 @@ export default function Editor({ github, group }: CodeProps) {
             </div>
           )}
 
+          {/* Large text files open without highlighting and can't be edited —
+              say so, or the disabled editor looks like a permissions problem. */}
+          {(sizeReadOnly || heavyFile) && !fileNotice && (
+            <div className="flex items-center gap-2 border-b border-sky-800/60 bg-sky-950/40 px-4 py-2 text-xs text-sky-300">
+              <span>📄</span>
+              <span>
+                {sizeReadOnly
+                  ? "This file is large, so it's open read-only without syntax highlighting."
+                  : "Large file — syntax highlighting and linting are off to keep editing responsive."}
+              </span>
+            </div>
+          )}
+
           {/* Locked banner when the member hasn't accepted code access */}
-          {!loading && codeAccess !== "loading" && !canEdit && (
+          {!loading && codeAccess !== "loading" && !hasCodeAccess && (
             <div className="flex items-center gap-2 border-b border-amber-800/60 bg-amber-950/40 px-4 py-2 text-xs text-amber-300">
               <span>🔒</span>
               {codeAccess === "INVITED" ? (
@@ -1034,7 +1275,10 @@ export default function Editor({ github, group }: CodeProps) {
             </div>
           )}
 
-          <div className="flex-1 overflow-hidden">
+          {/* min-h-0 is what makes this scroll: without it the flex child
+              refuses to shrink below its content, so a long file grows past
+              the viewport instead of scrolling inside CodeMirror. */}
+          <div className="min-h-0 flex-1 overflow-hidden">
             {loading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="flex items-center gap-2 text-gray-500 text-sm">
@@ -1042,6 +1286,23 @@ export default function Editor({ github, group }: CodeProps) {
                   Loading editor...
                 </div>
               </div>
+            ) : fileNotice?.kind === "image" ? (
+              <ImagePreview
+                name={fileNotice.name}
+                size={fileNotice.size}
+                downloadUrl={fileNotice.downloadUrl}
+              />
+            ) : fileNotice?.kind === "chunked" ? (
+              <LargeFileViewer
+                groupId={group}
+                filePath={filePath}
+                fileRef={currentBranch || undefined}
+                size={fileNotice.size}
+                name={fileNotice.name}
+                downloadUrl={fileNotice.downloadUrl}
+              />
+            ) : fileNotice ? (
+              <FilePlaceholder notice={fileNotice} />
             ) : (
               <CodeMirror
                 value={fileContent}
@@ -1049,7 +1310,14 @@ export default function Editor({ github, group }: CodeProps) {
                 theme="dark"
                 editable={canEdit}
                 readOnly={!canEdit}
-                extensions={[getFileLanguage(fileName)]}
+                // Language parsing and JSON linting both walk the whole
+                // document on every change, so they come off past 1 MB — that
+                // traversal, not the rendering, is what stalls the tab.
+                extensions={
+                  heavyFile || sizeReadOnly
+                    ? []
+                    : [getFileLanguage(fileName), lintExtension, lintGutter()]
+                }
                 onChange={handleFileChange}
                 basicSetup={{
                   lineNumbers: true,
@@ -1065,7 +1333,80 @@ export default function Editor({ github, group }: CodeProps) {
             )}
           </div>
         </div>
+
+        <EditorStatusBar
+          branch={currentBranch}
+          isDirty={isEdited}
+          fileName={activeFileName}
+          errors={diagnostics.errors}
+          warnings={diagnostics.warnings}
+        />
       </div>
-    </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-900">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+              Delete {deleteTarget.name}?
+            </h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              This stages the file for deletion. Nothing is removed from GitHub until an admin
+              merges your change request — you can undo it before then.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => stageDelete(deleteTarget)}
+                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-500"
+              >
+                Stage deletion
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Docked on wide screens; a dismissible sheet on phones. */}
+      {aiCollapsed ? (
+        <div className="hidden h-full w-11 shrink-0 flex-col items-center border-l border-gray-200 bg-gray-50 pt-3 dark:border-gray-800 dark:bg-gray-950 lg:flex">
+          <button
+            onClick={() => setAiCollapsed(false)}
+            aria-label="Open AI assistant"
+            title="AI Assistant"
+            className="rounded-lg p-2 text-purple-500 hover:bg-gray-200 dark:hover:bg-gray-800"
+          >
+            <Bot size={18} />
+          </button>
+        </div>
+      ) : (
+        <div className="hidden h-full w-80 shrink-0 lg:block">
+          <AiAssistantPanel
+            fileName={activeFileName}
+            onGenerateReadme={handleGenerateReadme}
+            generatingReadme={generatingReadme}
+            onCollapse={() => setAiCollapsed(true)}
+          />
+        </div>
+      )}
+      {aiOpen && (
+        <div className="fixed inset-0 z-40 flex lg:hidden">
+          <div className="flex-1 bg-black/50" onClick={() => setAiOpen(false)} aria-hidden />
+          <div className="w-[85vw] max-w-sm">
+            <AiAssistantPanel
+              fileName={activeFileName}
+              onClose={() => setAiOpen(false)}
+              onGenerateReadme={handleGenerateReadme}
+              generatingReadme={generatingReadme}
+            />
+          </div>
+        </div>
+      )}
+    </IdeShell>
   );
 }

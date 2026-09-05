@@ -116,22 +116,34 @@ function handleCallSignal(ws: WebSocket, msg: any, senderId: string) {
   switch (msg.type) {
     case "call_offer": {
       if (msg.groupId) {
-        // Broadcast to all connected group members
+        const outbound = JSON.stringify({
+          type: "call_offer",
+          callId: msg.callId,
+          roomName: msg.roomName,
+          callerId: senderId,
+          callerName: msg.callerName,
+          callType: msg.callType,
+          groupId: msg.groupId,
+        });
+
+        // Ring the group's actual roster, which the caller resolved server-side
+        // and sent as inviteeIds. groupClients only holds sockets that joined
+        // the group chat room, so relying on it meant a group call silently
+        // rang nobody unless every member happened to be on that page.
+        const invitees: string[] = Array.isArray(msg.inviteeIds) ? msg.inviteeIds : [];
+        const rung = new Set<string>();
+        for (const uid of invitees) {
+          if (typeof uid !== "string" || uid === senderId) continue;
+          if (sendToUser(uid, outbound)) rung.add(uid);
+        }
+
+        // Anyone sitting in the group room who wasn't on the roster (or whose
+        // id didn't arrive) still gets rung, so this can't regress the old path.
         const members = groupClients.get(msg.groupId);
         if (members) {
-          const outbound = JSON.stringify({
-            type: "call_offer",
-            callId: msg.callId,
-            roomName: msg.roomName,
-            callerId: senderId,
-            callerName: msg.callerName,
-            callType: msg.callType,
-            groupId: msg.groupId,
-          });
           for (const [mid, mws] of members) {
-            if (mid !== senderId && mws.readyState === WebSocket.OPEN) {
-              mws.send(outbound);
-            }
+            if (mid === senderId || rung.has(mid)) continue;
+            if (mws.readyState === WebSocket.OPEN) mws.send(outbound);
           }
         }
       } else if (msg.targetId) {
