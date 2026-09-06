@@ -9,7 +9,7 @@ import ImagePreview from "../../app/code-editor/[groupId]/[githubRepo]/ImagePrev
 describe("ImagePreview", () => {
   it("points the img straight at download_url", () => {
     const { container } = render(
-      <ImagePreview name="a.png" size={80 * 1024 * 1024} downloadUrl="https://raw/a.png" />,
+      <ImagePreview name="a.png" size={80 * 1024 * 1024} downloadUrl="https://raw/a.png" saveUrl="/api/file-download?group=g1&path=a.png" />,
     );
     const img = container.querySelector("img")!;
     expect(img.getAttribute("src")).toBe("https://raw/a.png");
@@ -19,7 +19,7 @@ describe("ImagePreview", () => {
 
   it("shows a skeleton until the image loads, then the image", async () => {
     const { container } = render(
-      <ImagePreview name="a.png" size={1024} downloadUrl="https://raw/a.png" />,
+      <ImagePreview name="a.png" size={1024} downloadUrl="https://raw/a.png" saveUrl="/api/file-download?group=g1&path=a.png" />,
     );
     expect(container.querySelector(".animate-pulse")).not.toBeNull();
 
@@ -32,7 +32,7 @@ describe("ImagePreview", () => {
 
   it("shows name and human-readable size", () => {
     render(
-      <ImagePreview name="photo.jpg" size={80 * 1024 * 1024} downloadUrl="https://raw/p" />,
+      <ImagePreview name="photo.jpg" size={80 * 1024 * 1024} downloadUrl="https://raw/p" saveUrl="/api/file-download?group=g1&path=p" />,
     );
     expect(screen.getByText("photo.jpg")).toBeDefined();
     expect(screen.getByText("80 MB")).toBeDefined();
@@ -40,7 +40,7 @@ describe("ImagePreview", () => {
 
   it("offers retry and download when the image fails", async () => {
     const { container } = render(
-      <ImagePreview name="a.png" size={1024} downloadUrl="https://raw/a.png" />,
+      <ImagePreview name="a.png" size={1024} downloadUrl="https://raw/a.png" saveUrl="/api/file-download?group=g1&path=a.png" />,
     );
 
     fireEvent.error(container.querySelector("img")!);
@@ -52,7 +52,7 @@ describe("ImagePreview", () => {
 
   it("re-requests the image on retry", async () => {
     const { container } = render(
-      <ImagePreview name="a.png" size={1024} downloadUrl="https://raw/a.png" />,
+      <ImagePreview name="a.png" size={1024} downloadUrl="https://raw/a.png" saveUrl="/api/file-download?group=g1&path=a.png" />,
     );
     fireEvent.error(container.querySelector("img")!);
 
@@ -63,8 +63,24 @@ describe("ImagePreview", () => {
     await waitFor(() => expect(container.querySelector("img")).not.toBeNull());
   });
 
+  it("downloads through our own origin, not GitHub", () => {
+    render(
+      <ImagePreview
+        name="a.png"
+        size={1024}
+        downloadUrl="https://raw.githubusercontent.com/o/r/main/a.png"
+        saveUrl="/api/file-download?group=g1&path=a.png"
+      />,
+    );
+    const link = screen.getByText("Download").closest("a")!;
+    // A cross-origin href would make the browser navigate instead of saving,
+    // which is the bug this replaced.
+    expect(link.getAttribute("href")).toBe("/api/file-download?group=g1&path=a.png");
+    expect(link.getAttribute("href")?.startsWith("http")).toBe(false);
+  });
+
   it("reports an error when there is no URL to load", () => {
-    render(<ImagePreview name="a.png" size={1024} downloadUrl={null} />);
+    render(<ImagePreview name="a.png" size={1024} downloadUrl={null} saveUrl="/api/file-download?group=g1&path=a.png" />);
     expect(screen.getByText("Unable to preview this image.")).toBeDefined();
   });
 });

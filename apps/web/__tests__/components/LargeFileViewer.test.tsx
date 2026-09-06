@@ -42,7 +42,7 @@ function renderViewer() {
       fileRef="main"
       size={FILE_SIZE}
       name="huge.log"
-      downloadUrl="https://raw/huge.log"
+      saveUrl="/api/file-download?group=g1&path=huge.log"
     />,
   );
 }

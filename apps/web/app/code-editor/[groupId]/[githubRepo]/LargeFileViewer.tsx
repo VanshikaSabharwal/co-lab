@@ -29,7 +29,8 @@ interface LargeFileViewerProps {
   fileRef?: string;
   size: number;
   name: string;
-  downloadUrl: string | null;
+  /** Same-origin attachment URL; see /api/file-download. */
+  saveUrl: string;
 }
 
 interface Chunk {
@@ -50,7 +51,7 @@ export default function LargeFileViewer({
   fileRef,
   size,
   name,
-  downloadUrl,
+  saveUrl,
 }: LargeFileViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -218,16 +219,12 @@ export default function LargeFileViewer({
           {name} · {formatBytes(size)} · read-only, streamed in {formatBytes(CHUNK_SIZE)}{" "}
           chunks
         </span>
-        {downloadUrl && (
-          <a
-            href={downloadUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="shrink-0 rounded bg-gray-700 px-2 py-1 text-gray-100 hover:bg-gray-600"
-          >
-            Download
-          </a>
-        )}
+        <a
+          href={saveUrl}
+          className="shrink-0 rounded bg-gray-700 px-2 py-1 text-gray-100 hover:bg-gray-600"
+        >
+          Download
+        </a>
       </div>
 
       <div

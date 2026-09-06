@@ -28,6 +28,7 @@ import EditorBreadcrumb from "./components/EditorBreadcrumb";
 import EditorStatusBar from "./components/EditorStatusBar";
 import AiAssistantPanel from "./components/AiAssistantPanel";
 import CollaborationPanel from "./components/CollaborationPanel";
+import TrashPanel, { type TrashItem } from "./components/TrashPanel";
 import LargeFileViewer from "./LargeFileViewer";
 import ImagePreview from "./ImagePreview";
 import { Bot } from "lucide-react";
@@ -227,7 +228,13 @@ function formatBytes(bytes: number): string {
  * Stands in for the editor for non-image binaries and files past the viewer's
  * ceiling. Images have their own component; large text has the chunked viewer.
  */
-function FilePlaceholder({ notice }: { notice: FileNotice }) {
+function FilePlaceholder({
+  notice,
+  saveUrl,
+}: {
+  notice: FileNotice;
+  saveUrl: string;
+}) {
   return (
     <div className="flex h-full items-center justify-center overflow-auto p-8">
       <div className="flex max-w-lg flex-col items-center gap-3 text-center">
@@ -242,16 +249,13 @@ function FilePlaceholder({ notice }: { notice: FileNotice }) {
             : `${formatBytes(notice.size)} · binary file, can't be shown as text`}
         </p>
 
-        {notice.downloadUrl && (
-          <a
-            href={notice.downloadUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-md bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-100 transition hover:bg-gray-600"
-          >
-            Download
-          </a>
-        )}
+        {/* Same-origin so the browser saves rather than navigates. */}
+        <a
+          href={saveUrl}
+          className="rounded-md bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-100 transition hover:bg-gray-600"
+        >
+          Download
+        </a>
       </div>
     </div>
   );
@@ -381,6 +385,13 @@ export default function Editor({ github, group }: CodeProps) {
   // request is merged, at which point the file is actually removed.
   const [deletedPaths, setDeletedPaths] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<TreeNode | null>(null);
+  const [trashItems, setTrashItems] = useState<TrashItem[]>([]);
+  const [trashLoading, setTrashLoading] = useState(true);
+  const [trashTtlDays, setTrashTtlDays] = useState(10);
+  const [restoringPath, setRestoringPath] = useState<string | null>(null);
+  // Dismissed for this session only — the reminder should come back tomorrow
+  // if the deletion is still sitting there.
+  const [expiryNoticeDismissed, setExpiryNoticeDismissed] = useState(false);
   const [diagnostics, setDiagnostics] = useState<{ errors: number; warnings: number }>({
     errors: 0,
     warnings: 0,
@@ -1008,30 +1019,40 @@ export default function Editor({ github, group }: CodeProps) {
     );
   };
 
-  // Staged deletions live in the DB, so rehydrate them — otherwise a reload
-  // would show a file as present while it's still queued for removal.
-  useEffect(() => {
+  /**
+   * Load the trash, which is also how staged deletions are rehydrated — the
+   * route returns only this user's staged deletions, already swept of expired
+   * ones, so the tree and the panel can't disagree about what's staged.
+   */
+  const loadTrash = useCallback(async () => {
     if (!group) return;
-    let cancelled = false;
-    fetch(`/api/modified-files?group=${group}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((drafts: { path: string; deleted?: boolean; userId: string }[]) => {
-        if (cancelled || !Array.isArray(drafts)) return;
-        setDeletedPaths(
-          new Set(
-            drafts
-              // The owner also receives other members' drafts from this route;
-              // only the current user's staged deletions are theirs to undo.
-              .filter((d) => d.deleted && d.userId === userId)
-              .map((d) => d.path),
-          ),
+    try {
+      const res = await fetch(`/api/trash?group=${group}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const items: TrashItem[] = data.items ?? [];
+      setTrashItems(items);
+      setTrashTtlDays(data.ttlDays ?? 10);
+      setDeletedPaths(new Set(items.map((i) => i.path)));
+      // Expiry restores the file, so tell the user rather than letting a
+      // staged deletion quietly reappear in the tree.
+      if (data.restoredOnExpiry > 0) {
+        toast(
+          `${data.restoredOnExpiry} staged deletion${
+            data.restoredOnExpiry === 1 ? "" : "s"
+          } expired and ${data.restoredOnExpiry === 1 ? "was" : "were"} undone`,
         );
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [group, userId]);
+      }
+    } catch {
+      // A failed trash load leaves the previous list; nothing destructive.
+    } finally {
+      setTrashLoading(false);
+    }
+  }, [group]);
+
+  useEffect(() => {
+    void loadTrash();
+  }, [loadTrash]);
 
   const stageDelete = async (node: TreeNode) => {
     setDeleteTarget(null);
@@ -1044,6 +1065,7 @@ export default function Editor({ github, group }: CodeProps) {
       if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
       setDeletedPaths((prev) => new Set(prev).add(node.path));
       setIsEdited(true);
+      void loadTrash();
       toast.success("Staged for deletion — raise a change request to apply it");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't stage the deletion");
@@ -1051,6 +1073,7 @@ export default function Editor({ github, group }: CodeProps) {
   };
 
   const restoreFile = async (path: string) => {
+    setRestoringPath(path);
     try {
       const res = await fetch("/api/delete-file", {
         method: "DELETE",
@@ -1063,14 +1086,37 @@ export default function Editor({ github, group }: CodeProps) {
         next.delete(path);
         return next;
       });
+      setTrashItems((prev) => prev.filter((i) => i.path !== path));
       toast.success("Deletion undone");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't undo the deletion");
+    } finally {
+      setRestoringPath(null);
     }
   };
 
   const activeFileName =
     files.find((f) => f.path === filePath)?.name || filePath.split("/").pop() || fileName;
+
+  // Staged deletions inside their final day. Drives both the nav badge and the
+  // banner; derived here so the two can never disagree.
+  const expiringSoon = useMemo(
+    () => trashItems.filter((i) => i.daysLeft <= 1),
+    [trashItems],
+  );
+
+  /**
+   * Same-origin URL that saves the open file to disk.
+   *
+   * Linking straight to GitHub's download_url does not download: the
+   * `download` attribute is ignored cross-origin, so the browser navigates
+   * instead. /api/file-download re-serves the bytes with Content-Disposition.
+   */
+  const downloadHref = useMemo(() => {
+    const params = new URLSearchParams({ group, path: filePath });
+    if (currentBranch) params.set("ref", currentBranch);
+    return `/api/file-download?${params.toString()}`;
+  }, [group, filePath, currentBranch]);
 
   return (
     <IdeShell
@@ -1081,6 +1127,7 @@ export default function Editor({ github, group }: CodeProps) {
       onSearchChange={setFileSearch}
       menuOpen={menuOpen}
       onMenuOpenChange={setMenuOpen}
+      trashWarningCount={expiringSoon.length}
       onOpenAi={() => setAiOpen(true)}
       explorer={
         loading ? (
@@ -1101,6 +1148,16 @@ export default function Editor({ github, group }: CodeProps) {
       {ideSection === "collaboration" ? (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <CollaborationPanel groupId={group} repo={github} />
+        </div>
+      ) : ideSection === "trash" ? (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <TrashPanel
+            items={trashItems}
+            loading={trashLoading}
+            ttlDays={trashTtlDays}
+            restoringPath={restoringPath}
+            onRestore={restoreFile}
+          />
         </div>
       ) : ideSection === "settings" ? (
         <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-center">
@@ -1236,6 +1293,36 @@ export default function Editor({ github, group }: CodeProps) {
             </div>
           )}
 
+          {/* Staged deletions about to age out. Amber rather than red: expiry
+              undoes the staging, so nothing is lost — the risk is a deletion
+              the user meant to keep silently reverting. */}
+          {expiringSoon.length > 0 && !expiryNoticeDismissed && (
+            <div className="flex items-center justify-between gap-3 border-b border-amber-800/60 bg-amber-950/40 px-4 py-2.5 text-xs text-amber-200">
+              <span className="flex items-center gap-2">
+                <span>🗑️</span>
+                {expiringSoon.length === 1
+                  ? `“${expiringSoon[0]!.name}” has been staged for deletion for ${trashTtlDays - 1} days and will be restored tomorrow.`
+                  : `${expiringSoon.length} staged deletions will be restored tomorrow.`}{" "}
+                Raise a change request to apply them.
+              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  onClick={() => setIdeSection("trash")}
+                  className="rounded-md bg-white px-3 py-1 font-medium text-gray-900 hover:bg-gray-100"
+                >
+                  Open trash
+                </button>
+                <button
+                  onClick={() => setExpiryNoticeDismissed(true)}
+                  aria-label="Dismiss"
+                  className="rounded p-1 text-amber-300 hover:bg-amber-900/40"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Large text files open without highlighting and can't be edited —
               say so, or the disabled editor looks like a permissions problem. */}
           {(sizeReadOnly || heavyFile) && !fileNotice && (
@@ -1275,10 +1362,11 @@ export default function Editor({ github, group }: CodeProps) {
             </div>
           )}
 
-          {/* min-h-0 is what makes this scroll: without it the flex child
-              refuses to shrink below its content, so a long file grows past
-              the viewport instead of scrolling inside CodeMirror. */}
-          <div className="min-h-0 flex-1 overflow-hidden">
+          {/* min-h-0 lets this shrink inside the flex column; overflow-auto is
+              what actually scrolls. With overflow-hidden here and CodeMirror at
+              height="100%", a long file was clipped to the viewport instead —
+              no element in the chain owned the scroll. */}
+          <div className="min-h-0 flex-1 overflow-auto">
             {loading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="flex items-center gap-2 text-gray-500 text-sm">
@@ -1291,6 +1379,7 @@ export default function Editor({ github, group }: CodeProps) {
                 name={fileNotice.name}
                 size={fileNotice.size}
                 downloadUrl={fileNotice.downloadUrl}
+                saveUrl={downloadHref}
               />
             ) : fileNotice?.kind === "chunked" ? (
               <LargeFileViewer
@@ -1299,14 +1388,17 @@ export default function Editor({ github, group }: CodeProps) {
                 fileRef={currentBranch || undefined}
                 size={fileNotice.size}
                 name={fileNotice.name}
-                downloadUrl={fileNotice.downloadUrl}
+                saveUrl={downloadHref}
               />
             ) : fileNotice ? (
-              <FilePlaceholder notice={fileNotice} />
+              <FilePlaceholder notice={fileNotice} saveUrl={downloadHref} />
             ) : (
               <CodeMirror
                 value={fileContent}
-                height="100%"
+                // Not height="100%": that pins the editor to the parent box, so
+                // long files get clipped. Growing to content lets the wrapper
+                // above scroll, with a minimum so short files still fill it.
+                minHeight="100%"
                 theme="dark"
                 editable={canEdit}
                 readOnly={!canEdit}

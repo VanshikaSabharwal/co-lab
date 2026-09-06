@@ -12,10 +12,18 @@ import { useEffect, useState } from "react";
 interface ImagePreviewProps {
   name: string;
   size: number;
+  /** GitHub's raw URL — used for display only, since <img> is fine cross-origin. */
   downloadUrl: string | null;
+  /** Same-origin attachment URL; a cross-origin `download` attribute is ignored. */
+  saveUrl: string;
 }
 
-export default function ImagePreview({ name, size, downloadUrl }: ImagePreviewProps) {
+export default function ImagePreview({
+  name,
+  size,
+  downloadUrl,
+  saveUrl,
+}: ImagePreviewProps) {
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     downloadUrl ? "loading" : "error",
   );
@@ -72,27 +80,24 @@ export default function ImagePreview({ name, size, downloadUrl }: ImagePreviewPr
               Retry
             </button>
           )}
-          {downloadUrl && (
-            <>
-              {status === "ready" && (
-                <a
-                  href={downloadUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-md bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-100 transition hover:bg-gray-600"
-                >
-                  Open full image
-                </a>
-              )}
-              <a
-                href={downloadUrl}
-                download={name}
-                className="rounded-md bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-100 transition hover:bg-gray-600"
-              >
-                Download
-              </a>
-            </>
+          {status === "ready" && downloadUrl && (
+            <a
+              href={downloadUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-100 transition hover:bg-gray-600"
+            >
+              Open full image
+            </a>
           )}
+          {/* Same-origin, so Content-Disposition actually saves the file.
+              Pointing this at GitHub made the browser navigate instead. */}
+          <a
+            href={saveUrl}
+            className="rounded-md bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-100 transition hover:bg-gray-600"
+          >
+            Download
+          </a>
         </div>
       </div>
     </div>

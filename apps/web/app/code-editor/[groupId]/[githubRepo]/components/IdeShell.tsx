@@ -4,11 +4,11 @@ import React from "react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import {
-  Folder, Users, Settings, Menu, Search, Bell, LogOut, Plus, X, Sparkles,
+  Folder, Users, Settings, Menu, Search, Bell, LogOut, Plus, X, Sparkles, Trash2,
 } from "lucide-react";
 import { cn } from "../../../../lib/utils";
 
-export type IdeSection = "files" | "collaboration" | "settings";
+export type IdeSection = "files" | "collaboration" | "trash" | "settings";
 
 interface IdeShellProps {
   repo: string;
@@ -23,17 +23,21 @@ interface IdeShellProps {
   onOpenAi?: () => void;
   menuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
+  /** Staged deletions expiring within a day; shown as a badge on Trash. */
+  trashWarningCount?: number;
 }
 
 const NAV: { key: IdeSection; label: string; short: string; icon: typeof Folder }[] = [
   { key: "files", label: "Files", short: "Files", icon: Folder },
   { key: "collaboration", label: "Collaboration", short: "Collab", icon: Users },
+  { key: "trash", label: "Trash", short: "Trash", icon: Trash2 },
   { key: "settings", label: "Settings", short: "Settings", icon: Settings },
 ];
 
 export default function IdeShell({
   repo, section, onSectionChange, search, onSearchChange,
   explorer, children, onOpenAi, menuOpen, onMenuOpenChange,
+  trashWarningCount = 0,
 }: IdeShellProps) {
   return (
     <div className="flex h-[100dvh] flex-col bg-white text-gray-900 dark:bg-gray-950 dark:text-white">
@@ -66,6 +70,7 @@ export default function IdeShell({
               )}
             >
               {label}
+              {key === "trash" && trashWarningCount > 0 && <NavBadge n={trashWarningCount} />}
             </button>
           ))}
         </nav>
@@ -147,6 +152,9 @@ export default function IdeShell({
                 )}
               >
                 <Icon size={16} /> {label}
+                {key === "trash" && trashWarningCount > 0 && (
+                  <NavBadge n={trashWarningCount} />
+                )}
               </button>
             ))}
           </nav>
@@ -186,16 +194,29 @@ export default function IdeShell({
             key={key}
             onClick={() => onSectionChange(key)}
             className={cn(
-              "flex flex-col items-center gap-0.5 rounded-lg px-4 py-1 text-[11px] transition-colors",
+              "relative flex flex-col items-center gap-0.5 rounded-lg px-4 py-1 text-[11px] transition-colors",
               section === key
                 ? "bg-blue-600 text-white"
                 : "text-gray-500 dark:text-gray-400",
             )}
           >
             <Icon size={18} /> {short}
+            {key === "trash" && trashWarningCount > 0 && (
+              <span className="absolute right-2 top-0 h-2 w-2 rounded-full bg-amber-500" />
+            )}
           </button>
         ))}
       </nav>
     </div>
+  );
+}
+
+/** Count of staged deletions about to expire. Amber, not red: expiry restores
+    the file, so it is a nudge rather than a warning about data loss. */
+function NavBadge({ n }: { n: number }) {
+  return (
+    <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold text-white">
+      {n}
+    </span>
   );
 }
