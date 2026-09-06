@@ -18,7 +18,11 @@ module.exports = {
     node: true,
     browser: true,
   },
-  plugins: ["only-warn"],
+  // @typescript-eslint and react-hooks are installed and their rules are
+  // referenced across the app, but without registering the plugins here ESLint
+  // reported "Definition for rule ... was not found" and skipped those checks
+  // entirely — they looked enforced while doing nothing.
+  plugins: ["only-warn", "@typescript-eslint", "react-hooks"],
   settings: {
     "import/resolver": {
       typescript: {
