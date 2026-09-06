@@ -11,6 +11,11 @@ interface NotificationsType {
   userName: string;
   ownerName: string;
   groupName: string;
+  ownerId?: string;
+  recipientId?: string | null;
+  /** GROUP_INVITE, CODE_ACCESS, … Absent on older change-request rows. */
+  type?: string | null;
+  message?: string | null;
   status: "raised" | "accepted" | "rejected";
   reason?: string;
 }
@@ -90,6 +95,12 @@ const NotificationsPage = () => {
       </div>
     );
 
+  // Typed notifications are addressed to a person and carry their own copy;
+  // the CR cards below hardcode "raised a CR" and link to a review page, which
+  // would be wrong for them. An absent type means a legacy change-request row.
+  const personalNotifications = notifications.filter((n) => !!n.type);
+  const crNotifications = notifications.filter((n) => !n.type);
+
   const isEmpty = notifications.length === 0 && rejections.length === 0 && dmNotifications.length === 0;
 
   return (
@@ -162,13 +173,42 @@ const NotificationsPage = () => {
               </div>
             )}
 
-            {notifications.length > 0 && (
+            {personalNotifications.length > 0 && (
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
+                  Groups
+                </h2>
+                <ul className="space-y-2">
+                  {personalNotifications.map((n) => (
+                    <li
+                      key={n.id}
+                      className="p-4 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm flex items-start justify-between gap-3 flex-wrap"
+                    >
+                      <p className="text-sm text-gray-800 dark:text-gray-200 min-w-0">
+                        {n.message}
+                      </p>
+                      {/* A code-access invite is accepted on the profile page,
+                          not in the group — sending them to the group would be
+                          a dead end. */}
+                      <Link
+                        href={n.type === "CODE_ACCESS" ? "/profile" : `/group/${n.groupId}`}
+                        className="text-xs font-medium text-blue-500 hover:underline flex-shrink-0"
+                      >
+                        {n.type === "CODE_ACCESS" ? "Go to profile →" : "Open group →"}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {crNotifications.length > 0 && (
               <div id="tour-notif-cr">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
                   Change Requests
                 </h2>
                 <ul className="space-y-2">
-                  {notifications.map((n) => (
+                  {crNotifications.map((n) => (
                     <li
                       key={n.id}
                       className="p-4 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm flex items-start justify-between gap-3 flex-wrap"

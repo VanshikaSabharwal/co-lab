@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
 import { randomBytes } from "crypto";
 import { getSessionUser, isGroupMember, unauthorized, forbidden } from "../../lib/apiAuth";
-import { getBaseUrl } from "../../lib/githubLink";
+import { getRequestBaseUrl } from "../../lib/githubLink";
+import { recordMemberInvited } from "../../lib/memberEvents";
 
 export async function POST(req: Request) {
   const me = await getSessionUser();
@@ -56,10 +57,31 @@ export async function POST(req: Request) {
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
       });
-      const invitationLink = `${getBaseUrl()}/join/${link.token}`;
+      const invitationLink = `${getRequestBaseUrl(req)}/join/${link.token}`;
       const message = `You have been invited to join our app! Click here to sign up:${invitationLink}`;
       const encodedMessage = encodeURIComponent(message);
       const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
+
+      // If that phone already belongs to an account, notify them now. If not,
+      // there is nobody to address yet — the join page raises the notification
+      // once they sign up and redeem the link.
+      const [existingUser, actor] = await Promise.all([
+        prisma.user.findUnique({
+          where: { phone: phoneNumber },
+          select: { id: true, name: true, email: true },
+        }),
+        prisma.user.findUnique({
+          where: { id: me.id },
+          select: { name: true, email: true },
+        }),
+      ]);
+      await recordMemberInvited({
+        groupId,
+        actorId: me.id,
+        actorName: actor?.name || actor?.email || "Someone",
+        inviteeId: existingUser?.id ?? null,
+        inviteeName: existingUser?.name || existingUser?.email || phoneNumber,
+      });
 
       return NextResponse.json({ success: true, whatsappUrl }, { status: 200 });
     }

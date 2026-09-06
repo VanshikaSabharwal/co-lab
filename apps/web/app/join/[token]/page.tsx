@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import prisma from "../../lib/prisma";
 import { getSessionUser } from "../../lib/apiAuth";
+import { recordMemberInvited, claimPendingInvites } from "../../lib/memberEvents";
 
 /**
  * Redeems a group invite link.
@@ -18,6 +19,7 @@ export default async function JoinPage({ params }: { params: { token: string } }
     select: {
       id: true,
       groupId: true,
+      createdBy: true,
       expiresAt: true,
       revokedAt: true,
       group: { select: { groupName: true, ownerId: true } },
@@ -65,6 +67,31 @@ export default async function JoinPage({ params }: { params: { token: string } }
         data: { usedCount: { increment: 1 } },
       }),
     ]);
+
+    // The notification deferred at invite time. Someone invited by phone had
+    // no account then, so there was no user to address — this is the first
+    // moment there is one.
+    const [joiner, creator] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: me.id },
+        select: { name: true, email: true, phone: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: link.createdBy },
+        select: { name: true, email: true },
+      }),
+    ]);
+    const joinerName = joiner?.name || joiner?.email || "A new member";
+
+    await claimPendingInvites(me.id, joiner?.phone, link.groupId);
+    await recordMemberInvited({
+      groupId: link.groupId,
+      // The person whose link this is, so the chat reads as they invited them.
+      actorId: link.createdBy,
+      actorName: creator?.name || creator?.email || "Someone",
+      inviteeId: me.id,
+      inviteeName: joinerName,
+    });
   }
 
   redirect(`/group/${link.groupId}`);

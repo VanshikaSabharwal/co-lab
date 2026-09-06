@@ -468,6 +468,19 @@ model Notifications {
   groupName String
   message   String?
   createdAt DateTime @default(now())
+
+  // Who should see this. `ownerId` was the de-facto recipient, which meant a
+  // notification could only ever be addressed to a group owner — there was no
+  // way to tell a member anything. Nullable so existing rows keep working:
+  // readers fall back to ownerId when this is null.
+  recipientId String?
+  // Distinguishes an access grant from a change request, so the UI can render
+  // the right copy and action.
+  type        String?
+  readAt      DateTime?
+
+  @@index([recipientId, readAt])
+  @@index([ownerId])
 }
 
 model RejectedCr {

@@ -54,10 +54,12 @@ export async function sendCollaboratorInvite(
   // 201 = invitation created; 204 = already a collaborator (no invite needed)
   if (res.status === 204) {
     await setCodeAccess(groupId, memberUserId, "ACTIVE");
+    await notifyAccessGranted(groupId, memberUserId, "ACTIVE");
     return { status: "ACTIVE" };
   }
   if (res.status === 201) {
     await setCodeAccess(groupId, memberUserId, "INVITED");
+    await notifyAccessGranted(groupId, memberUserId, "INVITED");
     return { status: "INVITED" };
   }
 
@@ -67,6 +69,59 @@ export async function sendCollaboratorInvite(
     code: res.status,
     message: body.message || `GitHub returned ${res.status}`,
   };
+}
+
+/**
+ * Tell the member they were granted access.
+ *
+ * Without this the grant was silent: the owner saw "invitation sent" and the
+ * member saw nothing anywhere, so a pending GitHub invite could sit unaccepted
+ * indefinitely. INVITED is the case that actually needs an action from them.
+ */
+async function notifyAccessGranted(
+  groupId: string,
+  memberUserId: string,
+  status: "ACTIVE" | "INVITED",
+) {
+  try {
+    const [group, member] = await Promise.all([
+      prisma.group.findUnique({
+        where: { id: groupId },
+        select: { groupName: true, ownerId: true, ownerName: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: memberUserId },
+        select: { name: true, email: true },
+      }),
+    ]);
+    if (!group) return;
+
+    const memberName = member?.name || member?.email || "You";
+    const message =
+      status === "INVITED"
+        ? `You've been invited as a code collaborator on ${group.groupName}. Accept the GitHub invitation from your profile to start pushing.`
+        : `You now have push access to ${group.groupName}.`;
+
+    await prisma.notifications.create({
+      data: {
+        // recipientId is who sees it; ownerId stays the group owner so the
+        // older owner-scoped queries are unaffected.
+        recipientId: memberUserId,
+        type: "CODE_ACCESS",
+        userId: memberUserId,
+        userName: memberName,
+        groupId,
+        groupName: group.groupName,
+        ownerId: group.ownerId,
+        ownerName: group.ownerName,
+        message,
+      },
+    });
+  } catch (err) {
+    // A failed notification must never fail the grant itself — the access was
+    // already applied on GitHub by this point.
+    console.error("Failed to write access notification:", err);
+  }
 }
 
 async function setCodeAccess(

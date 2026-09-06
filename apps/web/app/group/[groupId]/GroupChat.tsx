@@ -9,6 +9,7 @@ import Link from "next/link";
 import { LayoutGrid, Video, Phone } from "lucide-react";
 import { useCall } from "../../components/call/CallProvider";
 import { fetchWsToken } from "../../lib/wsAuth";
+import { isSystemMessage, systemMessageText } from "../../lib/systemMessages";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
@@ -162,10 +163,38 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
         const res = await fetch(`/api/save-group-message?group=${group}`);
         const data: Message[] = await res.json();
         setMessages(data);
+        greetIfJustAdded(data);
       } catch (err) {
         console.error("Error fetching messages:", err);
         toast.error("Failed to fetch messages");
       }
+    }
+  };
+
+  /**
+   * Welcome a member the first time they open a group they were just added to.
+   *
+   * Keyed per group in localStorage so it fires once rather than on every
+   * visit, and only for a recent event — an old "added" line shouldn't greet
+   * someone who has been in the group for weeks.
+   */
+  const greetIfJustAdded = (history: Message[]) => {
+    if (!group) return;
+    const key = `ko-lab-greeted-${group}`;
+    try {
+      if (localStorage.getItem(key)) return;
+      const recent = [...history]
+        .reverse()
+        .find(
+          (m) =>
+            isSystemMessage(m.content) &&
+            Date.now() - new Date(m.createdAt).getTime() < 24 * 60 * 60 * 1000,
+        );
+      if (!recent) return;
+      localStorage.setItem(key, "1");
+      toast(systemMessageText(recent.content), { icon: "👋" });
+    } catch {
+      // Private browsing can throw on localStorage; a missing greeting is fine.
     }
   };
 
@@ -260,10 +289,16 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
             },
           ]);
           if (message.senderId !== senderId) {
-            sendBrowserNotification(
-              `${message.senderName ?? "Someone"} in ${groupDetails?.groupName ?? "a group"}`,
-              message.content
-            );
+            // A system announcement isn't from a person, so it would read as
+            // "Vanshika: __system__:… " in an OS notification.
+            if (isSystemMessage(message.content)) {
+              toast(systemMessageText(message.content), { icon: "👋" });
+            } else {
+              sendBrowserNotification(
+                `${message.senderName ?? "Someone"} in ${groupDetails?.groupName ?? "a group"}`,
+                message.content
+              );
+            }
           }
         };
 
@@ -643,6 +678,18 @@ const GroupChat: React.FC<GroupChatProps> = ({ group }) => {
             const isOwn = msg.senderId === session?.user?.id;
             const msgReactions = reactions[msg.id] || {};
             const hasReactions = Object.keys(msgReactions).length > 0;
+
+            // Membership events are announcements, not messages from a person:
+            // no bubble, no sender, no reactions.
+            if (isSystemMessage(msg.content)) {
+              return (
+                <div key={index} className="my-2 flex justify-center">
+                  <span className="rounded-full bg-gray-200/70 px-3 py-1 text-center text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                    {systemMessageText(msg.content)}
+                  </span>
+                </div>
+              );
+            }
 
             return (
               <div key={index} className={`flex mb-2 ${isOwn ? "justify-end" : "justify-start"}`}>

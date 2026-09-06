@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
 import { getSessionUser, unauthorized, forbidden } from "../../lib/apiAuth";
+import { recordMemberInvited } from "../../lib/memberEvents";
 
 export async function POST(req: Request) {
   const me = await getSessionUser();
@@ -52,6 +53,20 @@ export async function POST(req: Request) {
         groupId,
         role: "MEMBER", // Default role as per your schema
       },
+    });
+
+    // Tell the new member, and announce it in the group chat. Adding someone
+    // used to be completely silent — no notification, nothing in the thread.
+    const [actor, invitee] = await Promise.all([
+      prisma.user.findUnique({ where: { id: me.id }, select: { name: true, email: true } }),
+      prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } }),
+    ]);
+    await recordMemberInvited({
+      groupId,
+      actorId: me.id,
+      actorName: actor?.name || actor?.email || "Someone",
+      inviteeId: userId,
+      inviteeName: invitee?.name || invitee?.email || "A new member",
     });
 
     return NextResponse.json(

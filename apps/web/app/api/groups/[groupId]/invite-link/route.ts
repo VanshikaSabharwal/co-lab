@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import prisma from "../../../../lib/prisma";
 import { getSessionUser, unauthorized, forbidden } from "../../../../lib/apiAuth";
-import { getBaseUrl } from "../../../../lib/githubLink";
+import { getRequestBaseUrl } from "../../../../lib/githubLink";
 
 const LINK_TTL_DAYS = 7;
 
@@ -14,10 +14,11 @@ const LINK_TTL_DAYS = 7;
  * can't hand someone commit rights to the GitHub repo.
  */
 
-function linkUrl(token: string) {
-  // getBaseUrl() rather than a hardcoded host — the older send-invite route
-  // hardcoded localhost:3000, which is broken anywhere but a dev machine.
-  return `${getBaseUrl()}/join/${token}`;
+function linkUrl(req: Request, token: string) {
+  // Derived from the incoming request, so the link matches whatever host the
+  // owner is actually on — custom domain, preview deploy or localhost. Env
+  // config can be missing or stale; the request never is.
+  return `${getRequestBaseUrl(req)}/join/${token}`;
 }
 
 async function requireOwner(groupId: string, userId: string) {
@@ -33,7 +34,7 @@ async function requireOwner(groupId: string, userId: string) {
 }
 
 /** Current active link, if any. */
-export async function GET(_req: Request, { params }: { params: { groupId: string } }) {
+export async function GET(req: Request, { params }: { params: { groupId: string } }) {
   const me = await getSessionUser();
   if (!me) return unauthorized();
 
@@ -50,12 +51,12 @@ export async function GET(_req: Request, { params }: { params: { groupId: string
   });
 
   return NextResponse.json(
-    link ? { url: linkUrl(link.token), expiresAt: link.expiresAt, usedCount: link.usedCount } : { url: null },
+    link ? { url: linkUrl(req, link.token), expiresAt: link.expiresAt, usedCount: link.usedCount } : { url: null },
   );
 }
 
 /** Mint a link, replacing any existing one so only one is valid at a time. */
-export async function POST(_req: Request, { params }: { params: { groupId: string } }) {
+export async function POST(req: Request, { params }: { params: { groupId: string } }) {
   const me = await getSessionUser();
   if (!me) return unauthorized();
 
@@ -81,7 +82,7 @@ export async function POST(_req: Request, { params }: { params: { groupId: strin
   });
 
   return NextResponse.json(
-    { url: linkUrl(link.token), expiresAt: link.expiresAt },
+    { url: linkUrl(req, link.token), expiresAt: link.expiresAt },
     { status: 201 },
   );
 }

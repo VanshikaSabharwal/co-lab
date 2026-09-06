@@ -96,6 +96,36 @@ export function hasRepoScope(scope: string | null): boolean {
   return scope.split(/[,\s]+/).includes("repo");
 }
 
+/**
+ * Public origin of this deployment.
+ *
+ * Prefers explicit config, then Vercel's own deployment URL, and only falls
+ * back to localhost for local dev. The fallback used to win silently whenever
+ * NEXTAUTH_URL was unset, which put `http://localhost:3000` into invite links
+ * that were then shared with real users.
+ */
 export function getBaseUrl(): string {
-  return process.env.NEXTAUTH_URL || "http://localhost:3000";
+  const explicit = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL;
+  if (explicit) return explicit.replace(/\/+$/, "");
+
+  // Set automatically on Vercel; host only, so the scheme is added here.
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  if (vercel) return `https://${vercel.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+
+  return "http://localhost:3000";
+}
+
+/**
+ * Origin for a specific request, which beats any env guess: it reflects the
+ * host the user actually reached, including custom domains and previews.
+ * Falls back to getBaseUrl() when the headers aren't trustworthy.
+ */
+export function getRequestBaseUrl(req: Request): string {
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  if (!host) return getBaseUrl();
+  // Anything not obviously local is served over HTTPS in practice.
+  const proto =
+    req.headers.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
+  return `${proto}://${host}`;
 }
