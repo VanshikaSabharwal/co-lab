@@ -27,6 +27,16 @@ export const CONTENTS_API_MAX = 1024 * 1024;
 /** Bytes per chunk request from the virtualized viewer. */
 export const CHUNK_SIZE = 256 * 1024;
 
+/**
+ * How long a staged deletion survives before it is un-staged.
+ *
+ * Lives here rather than in the route because a Next.js route module may only
+ * export handlers and a small set of config keys.
+ */
+export const TRASH_TTL_DAYS = 10;
+/** Items expiring within this window drive the warning banner and badge. */
+export const TRASH_WARN_DAYS = 1;
+
 export const IMAGE_EXTENSIONS = new Set([
   "png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico",
 ]);

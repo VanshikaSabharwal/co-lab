@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "../../lib/prisma";
 import { getSessionUser, unauthorized, requireCodeAccess } from "../../lib/apiAuth";
+import { TRASH_TTL_DAYS, TRASH_WARN_DAYS } from "../../lib/githubFiles";
 
 /**
  * The trash: files staged for deletion but not yet applied.
@@ -14,11 +15,6 @@ import { getSessionUser, unauthorized, requireCodeAccess } from "../../lib/apiAu
  * Deletions are applied by merging a change request; that path is unchanged and
  * lives in /api/vcs/change-request.
  */
-
-/** How long a staged deletion survives before it is un-staged. */
-export const TRASH_TTL_DAYS = 10;
-/** Items expiring within this window drive the warning banner. */
-export const TRASH_WARN_DAYS = 1;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

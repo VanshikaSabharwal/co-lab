@@ -20,7 +20,8 @@ vi.mock("../../app/lib/apiAuth", () => ({
   forbidden: () => new Response(null, { status: 403 }),
 }));
 
-import { GET, TRASH_TTL_DAYS } from "../../app/api/trash/route";
+import { GET } from "../../app/api/trash/route";
+import { TRASH_TTL_DAYS } from "../../app/lib/githubFiles";
 import prisma from "../../app/lib/prisma";
 import { getSessionUser, requireCodeAccess } from "../../app/lib/apiAuth";
 
